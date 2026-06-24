@@ -12,9 +12,9 @@ status: in_progress
 - 项目：制造业设备安全操作 Agent（AI Agent 实习二面小项目，CLI-only）。
 - 方案：`plan/initial_solution.md`（v2，已通过 7 项门控校验）。
 - 实现进度：
-  - ✅ M1-M8（基础设施/知识库/工具/意图/安全/审批/记忆/打断）
-  - ⏳ 进行中：M9 LLM 层（mock + real DeepSeek）→ 单独汇报
-- 测试：全量 76 passed（`pytest tests/`，临时目录由 `conftest.py` 动态生成唯一子目录）；详见 `docs/03-tests/2026-06-24.md`。
+  - ✅ M1-M9（基础设施/知识库/工具/意图/安全/审批/记忆/打断/LLM）
+  - ⏳ 进行中：M10 Runner + CLI、M11 测试套件 + README
+- 测试：全量 89 passed 1 skipped（`pytest tests/`，临时目录由 `conftest.py` 动态生成）；详见 `docs/03-tests/2026-06-24.md`。
 - 安全：真实 DeepSeek key 仅存 `.env`（已 gitignore）；`.env.example` 不含真实值；源码无硬编码；L2 审批硬约束不可配置绕过。
 - 尚未完成：LLM、runner、CLI、README。
 
@@ -51,6 +51,7 @@ status: in_progress
 - 2026-06-24：**M7 完成** —— memory.py tiktoken 压缩 + pinned safety 不裁；8 passed。
 - 2026-06-24：**M8 完成** —— interrupt.py ESC 打断 CancellationToken；6 passed；全量 76 passed。
 - 2026-06-24：**审查修复#3** —— memory context_for_llm 接入预算裁剪；禁用 pytest cache；全量 78 passed 0 warning（interrupt 真实链路接入转 M9/M10）。
+- 2026-06-24：**M9 完成** —— llm.py mock+real DeepSeek + enhance_prompt + ESC 接入流式；real 连通验证通过；89 passed 1 skipped。
 
 ## 待确认
 

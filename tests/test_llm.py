@@ -203,3 +203,29 @@ def test_validate_loop_output_rejects_non_dict():
     out, err = validate_loop_output("not a dict")
     assert out is None
     assert err == "schema_invalid:not_a_dict"
+
+
+def test_try_parse_strips_markdown_code_fence():
+    from agent.llm import _try_parse
+
+    raw = '```json\n{"answer": "x", "tool_calls": [], "final": true}\n```'
+    data, err = _try_parse(raw)
+    assert err is None and data is not None
+    assert data["answer"] == "x"
+
+
+def test_try_parse_extracts_json_from_surrounding_noise():
+    from agent.llm import _try_parse
+
+    raw = '好的，结果如下：{"answer": "y", "final": true} 谢谢'
+    data, err = _try_parse(raw)
+    assert err is None and data is not None
+    assert data["answer"] == "y"
+
+
+def test_try_parse_rejects_pure_garbage():
+    from agent.llm import _try_parse
+
+    data, err = _try_parse("完全不是 JSON 的一段文字")
+    assert data is None
+    assert err == "model_invalid_json"

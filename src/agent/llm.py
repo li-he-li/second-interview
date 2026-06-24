@@ -98,8 +98,20 @@ def enhance_prompt(
 
 
 def _try_parse(raw: str) -> tuple[Optional[dict], Optional[str]]:
+    """解析 LLM 输出为 dict；容错处理 markdown 包裹与前后噪声。"""
+
+    if not isinstance(raw, str):
+        return None, "model_invalid_json"
+    text = raw.strip()
+    if text.startswith("```"):  # 剥 markdown 代码块包裹
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text).strip()
+    if text and not text.startswith("{"):  # 前后有噪声时提取首个 {...}
+        m = re.search(r"\{.*\}", text, re.S)
+        if m:
+            text = m.group(0)
     try:
-        data = json.loads(raw)
+        data = json.loads(text)
         return (data, None) if isinstance(data, dict) else (None, "model_invalid_json")
     except (json.JSONDecodeError, ValueError, TypeError):
         return None, "model_invalid_json"

@@ -112,17 +112,27 @@ class Agent:
             if not raw_input or not raw_input.strip():
                 return self._fallback(trace, Intent.UNKNOWN, SafetyLevel.L2, "输入为空，无法判断意图。", "invalid_input:empty")
 
+            # 预评估（loop 前）：设备状态拦截 + 审批等级 + 结构化字段（不信任 LLM）
+            token.check()
+            initial_ctx = self._safe_enhance(raw_input, [], trace)
+            risk_hints = initial_ctx.get("risk_hints") or []
+            initial_intent = classify(raw_input, risk_hints=risk_hints)
+            device_status = None
+            if initial_intent in (Intent.DEVICE_ACTION, Intent.UNSAFE_ACTION) or has_device_signal(raw_input):
+                device_status = get_device_status()
+                self.memory.update_device_state(device_status)
+            assessment = evaluate(raw_input, initial_intent, device_status=device_status, safety_cfg=self.cfg.safety)
+
+            # agent loop：LLM 驱动工具调用
             tool_results: list[dict] = []
             executed_calls: list[ToolCall] = []
             final_answer = ""
             final_sources: list[str] = []
             llm_error: Optional[str] = None
-            last_risk_hints: list[str] = []
 
             for _round in range(self.max_rounds):
                 token.check()
                 ctx = self._safe_enhance(raw_input, tool_results, trace)
-                last_risk_hints = ctx.get("risk_hints") or []
                 llm_result = self.llm.generate(ctx, cancel_token=token)
                 trace.append("llm_rounds", {"raw": (llm_result.raw_output or "")[:300], "error": llm_result.error})
                 if llm_result.error:
@@ -149,7 +159,7 @@ class Agent:
                 for tc in tool_calls:
                     if on_event:
                         on_event("tool_call", tc)
-                    call = self._exec_tool(tc, responder, token, trace)
+                    call = self._exec_tool(tc, assessment, responder, token, trace)
                     executed_calls.append(call)
                     tool_results.append(
                         {"tool": call.tool, "input": call.input, "output": call.output, "status": call.status.value}
@@ -163,13 +173,11 @@ class Agent:
                 final_answer = "未能给出明确结论，请人工复核。"
 
             token.check()
-            # 本地推断 intent / safety_level（结构化字段，不信任 LLM）
+            # 最终 intent（结构化字段，不信任 LLM）；assessment 沿用预评估（含设备拦截）
             tool_names = [c.tool for c in executed_calls]
-            base_intent = classify(raw_input, risk_hints=last_risk_hints)
-            intent = _intent_from_tools(base_intent, tool_names)
-            assessment = evaluate(raw_input, intent, safety_cfg=self.cfg.safety)
+            intent = _intent_from_tools(initial_intent, tool_names)
             # 闲聊修正：未调任何工具 + 无设备信号 + 无风险 → 自由对话 L0
-            if not executed_calls and not has_device_signal(raw_input) and not last_risk_hints and not llm_error:
+            if not executed_calls and not has_device_signal(raw_input) and not risk_hints and not llm_error:
                 assessment.level = SafetyLevel.L0
                 assessment.need_human_approval = False
                 assessment.reasons.append("chat")
@@ -191,6 +199,11 @@ class Agent:
                 assessment.reasons.append("knowledge_not_found")
             for hint in assessment.risk_hints:
                 self.memory.add_safety_fact(f"{intent.value}:{hint}")
+
+            # P0：需审批时给用户确认机会（LLM 未调 execute 的情况，如危险输入直接 final）
+            execute_handled = any(c.tool == "execute_device_command" for c in executed_calls)
+            if assessment.need_human_approval and not execute_handled:
+                self._ask_approval(assessment.level, "safety_review", {"command": raw_input}, responder, trace)
 
             sources = self.kb.filter_sources(final_sources)
             response = self._build_response(
@@ -225,15 +238,15 @@ class Agent:
             trace.append("warnings", f"prompt_enhancement_error:{type(exc).__name__}")
             return {"raw_user_input": raw_input, "normalized_query": normalize(raw_input), "tool_results": tool_results, "risk_hints": []}
 
-    def _exec_tool(self, tc: dict, responder, token, trace) -> ToolCall:
+    def _exec_tool(self, tc: dict, assessment, responder, token, trace) -> ToolCall:
         name = tc.get("tool", "")
         inp = tc.get("input") or {}
         token.check()
         if name not in TOOL_WHITELIST:
             return ToolCall(tool=name, input=inp, output={"error": "not_in_whitelist"}, status=ToolCallStatus.SKIPPED)
-        # 设备命令：强制 dry-run + 用户审批（安全门控，不可让渡）
+        # 设备命令：强制 dry-run + 用户审批（用实际安全等级，P1：不写死 L2）
         if name == "execute_device_command":
-            approved = self._ask_approval(SafetyLevel.L2, name, inp, responder, trace)
+            approved = self._ask_approval(assessment.level, name, inp, responder, trace)
             if not approved:
                 return ToolCall(tool=name, input=inp, output={"rejected": True}, status=ToolCallStatus.SKIPPED)
             out = execute_device_command(inp.get("command", {}), dry_run=True)  # 永远 dry-run

@@ -1,0 +1,45 @@
+{
+  "trace_id": "trace-20260624-184637-d6fb63ef",
+  "timestamp": "2026-06-24T18:46:37",
+  "warnings": [],
+  "raw_input": "设备报错 E42",
+  "llm_mode": "mock",
+  "retrieval": [
+    {
+      "source": "troubleshooting.md#e42-夹爪气压传感器异常",
+      "score": 7.5
+    },
+    {
+      "source": "troubleshooting.md#未知故障处理",
+      "score": 1.5
+    },
+    {
+      "source": "device_overview.md#armax-700-机械臂概述",
+      "score": 1.5
+    }
+  ],
+  "llm_raw_output": "{\"answer\": \"报错 E42 表示夹爪气压传感器读数异常或气压不足。排查步骤：1）检查气源压力是否在 0.4–0.6；当设备报错码不在知识库中，或无法确认故障原因时，不要猜测或编造排查方法。应返回低置信度结果，建议联系\", \"intent\": \"qa\", \"sources\": [\"troubleshooting.md#e42-夹爪气压传感器异常\", \"troubleshooting.md#未知故障处理\", \"device_overview.md#armax-700-机械臂概述\"], \"confidence\": 0.85, \"safety_level\": \"L0\", \"need_human_approval\": false, \"tool_calls\": [], \"final_action\": \"draft_by_mock_llm\", \"error\": null}",
+  "llm_error": null,
+  "memory_compress": {
+    "compressed": false,
+    "hard_trimmed": false,
+    "tokens_before": 117,
+    "tokens_after": 117
+  },
+  "memory_tokens": 117,
+  "final_json": {
+    "answer": "报错 E42 表示夹爪气压传感器读数异常或气压不足。排查步骤：1）检查气源压力是否在 0.4–0.6；当设备报错码不在知识库中，或无法确认故障原因时，不要猜测或编造排查方法。应返回低置信度结果，建议联系",
+    "intent": "qa",
+    "sources": [
+      "troubleshooting.md#e42-夹爪气压传感器异常",
+      "troubleshooting.md#未知故障处理",
+      "device_overview.md#armax-700-机械臂概述"
+    ],
+    "confidence": 0.85,
+    "safety_level": "L0",
+    "need_human_approval": false,
+    "tool_calls": [],
+    "final_action": "answered",
+    "error": null
+  }
+}

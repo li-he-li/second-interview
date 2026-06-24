@@ -1,0 +1,75 @@
+{
+  "trace_id": "trace-20260624-184756-49bd3797",
+  "timestamp": "2026-06-24T18:47:56",
+  "warnings": [],
+  "raw_input": "把机械臂移动到 x=100, y=50, z=20，并抓取零件。",
+  "llm_mode": "mock",
+  "retrieval": [
+    {
+      "source": "device_overview.md#工作空间与坐标系",
+      "score": 3.5
+    },
+    {
+      "source": "device_overview.md#armax-700-机械臂概述",
+      "score": 2.5
+    },
+    {
+      "source": "forbidden_actions.md#最大速度移动",
+      "score": 1.5
+    }
+  ],
+  "llm_raw_output": "{\"answer\": \"机械臂基坐标系为直角坐标，工作空间为 x、y、z 三轴。安全工作范围为 x ∈ [-1000, 10；ARMAX-700 是六轴工业机械臂，用于产线抓取、搬运和装配。默认工作模式为 idle，可接收外部\", \"intent\": \"device_action\", \"sources\": [\"device_overview.md#工作空间与坐标系\", \"device_overview.md#armax-700-机械臂概述\", \"forbidden_actions.md#最大速度移动\"], \"confidence\": 0.7, \"safety_level\": \"L1\", \"need_human_approval\": true, \"tool_calls\": [], \"final_action\": \"draft_by_mock_llm\", \"error\": null}",
+  "llm_error": null,
+  "approval": {
+    "key": "L1|execute_device_command|把机械臂移动到 x=100, y=50, z=20,并抓取零件。|low_risk_device_action",
+    "decision": "yes",
+    "approved": true
+  },
+  "memory_compress": {
+    "compressed": false,
+    "hard_trimmed": false,
+    "tokens_before": 129,
+    "tokens_after": 129
+  },
+  "memory_tokens": 129,
+  "final_json": {
+    "answer": "机械臂基坐标系为直角坐标，工作空间为 x、y、z 三轴。安全工作范围为 x ∈ [-1000, 10；ARMAX-700 是六轴工业机械臂，用于产线抓取、搬运和装配。默认工作模式为 idle，可接收外部",
+    "intent": "device_action",
+    "sources": [
+      "device_overview.md#工作空间与坐标系",
+      "device_overview.md#armax-700-机械臂概述",
+      "forbidden_actions.md#最大速度移动"
+    ],
+    "confidence": 0.7,
+    "safety_level": "L1",
+    "need_human_approval": true,
+    "tool_calls": [
+      {
+        "tool": "execute_device_command",
+        "input": {
+          "command": {
+            "action": "move",
+            "x": 100,
+            "y": 50,
+            "z": 20
+          },
+          "dry_run": true
+        },
+        "output": {
+          "dry_run": true,
+          "accepted": true,
+          "message": "Command validated but not executed (dry-run).",
+          "command": {
+            "action": "move",
+            "x": 100,
+            "y": 50,
+            "z": 20
+          }
+        },
+        "status": "success"
+      }
+    ],
+    "final_action": "dry_run_executed",
+    "error": null
+  }
+}

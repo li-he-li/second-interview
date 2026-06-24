@@ -14,7 +14,7 @@ status: in_progress
 - 实现进度：
   - ✅ M1 基础设施 / ✅ M2 知识库 / ✅ M3 工具 / ✅ M4 意图 / ✅ M5 安全策略
   - ⏳ 进行中：M6–M11（审批/记忆/打断/LLM/runner+CLI/README）
-- 测试：全量 54 passed（`pytest tests/`，临时目录固化为 `.temp/pytest`）；详见 `docs/03-tests/2026-06-24.md`。
+- 测试：全量 55 passed（`pytest tests/`，临时目录由 `conftest.py` 动态生成唯一子目录）；详见 `docs/03-tests/2026-06-24.md`。
 - 安全：真实 DeepSeek key 仅存 `.env`（已 gitignore）；`.env.example` 不含真实值；源码无硬编码。
 - 尚未完成：审批、记忆、打断、LLM、runner、CLI、README。
 
@@ -46,6 +46,7 @@ status: in_progress
 - 2026-06-24：**M3 完成** —— tools.py 三 mock 工具 + 白名单；11 passed。
 - 2026-06-24：**M4 完成** —— intent.py 五分类意图识别；9 passed。
 - 2026-06-24：**M5 完成** —— safety.py 安全定级 L0/L1/L2 + 参数边界 + 设备拦截；15 passed；全量 54 passed。
+- 2026-06-24：**P0/P1 修复** —— L2 审批硬编码不可被配置绕过（+回归测试）；测试改用 conftest 动态唯一 basetemp；全量 55 passed。
 
 ## 待确认
 

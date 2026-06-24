@@ -95,3 +95,14 @@ def test_evaluate_works_with_empty_config_conservative():
     # 配置缺失：坐标默认 ±1000，9999 仍越界
     a = evaluate("移动到 x=9999", Intent.DEVICE_ACTION, safety_cfg={})
     assert a.level == SafetyLevel.L2
+
+
+def test_l2_approval_cannot_be_disabled_by_config():
+    # P0 回归：即使配置 l2_requires_approval=False，L2 仍必须 need_human_approval=True
+    a = evaluate(
+        "以最大速度移动到 x=9999",
+        Intent.UNSAFE_ACTION,
+        safety_cfg={"approval": {"l2_requires_approval": False}},
+    )
+    assert a.level == SafetyLevel.L2
+    assert a.need_human_approval is True

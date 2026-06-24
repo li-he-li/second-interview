@@ -24,5 +24,5 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-# 固化项目内临时目录，避免系统 temp 权限问题导致测试不稳定
-addopts = "--basetemp=.temp/pytest"
+# 临时目录由 conftest.py 的 pytest_configure 动态生成项目内唯一子目录
+# （.temp/pytest-<时间戳>-<pid>），避免系统 temp 权限问题与固定目录复跑清理冲突。

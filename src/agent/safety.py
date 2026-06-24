@@ -108,7 +108,8 @@ def _device_blocks(device_status: Optional[dict], safety_cfg: dict) -> Optional[
 def _need_approval(level: SafetyLevel, safety_cfg: dict) -> bool:
     approval = safety_cfg.get("approval") or {}
     if level == SafetyLevel.L2:
-        return bool(approval.get("l2_requires_approval", True))
+        # L2 一律人工审批，不可被配置绕过（治理硬约束，见 plan 第 11 节）
+        return True
     if level == SafetyLevel.L1:
         return bool(approval.get("l1_requires_approval", True))
     return False

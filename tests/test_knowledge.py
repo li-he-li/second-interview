@@ -53,6 +53,12 @@ def test_irrelevant_query_returns_empty():
     assert matches == []  # 无关查询不应编造来源
 
 
+def test_unknown_device_model_returns_empty():
+    kb = KnowledgeBase.load()
+    matches = kb.search("QX999 设备的专用润滑周期是什么？")
+    assert matches == []  # 明确未收录型号时不拿通用机械臂资料硬答
+
+
 def test_filter_sources_rejects_fabricated():
     kb = KnowledgeBase.load()
     real = kb.chunks[0].source_id

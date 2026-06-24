@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import sys
 import threading
 
 
@@ -52,12 +53,17 @@ class EscListener:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
+        if not sys.stdin.isatty():
+            return
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._stop.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=0.2)
+        self._thread = None
 
     def _loop(self) -> None:
         try:

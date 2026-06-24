@@ -161,6 +161,16 @@ def _score(chunk: Chunk, norm_query: str, error_codes: set[str]) -> float:
     return score
 
 
+def _unknown_model_codes(norm_query: str, chunks: list[Chunk]) -> list[str]:
+    """查询明确包含未收录设备型号时，避免用通用资料硬匹配。"""
+
+    codes = set(re.findall(r"\b[a-z]{2,}-?\d{2,}\b", norm_query))
+    if not codes:
+        return []
+    blob = " ".join(normalize(" ".join([c.title, c.text, *c.keywords])) for c in chunks)
+    return [code for code in codes if code not in blob]
+
+
 def search(
     query: str,
     chunks: list[Chunk],
@@ -170,6 +180,8 @@ def search(
     """lexical 评分检索；低于阈值不返回，绝不编造。"""
 
     norm = normalize(query)
+    if _unknown_model_codes(norm, chunks):
+        return []
     error_codes = set(re.findall(r"e\d+", norm))
     scored = [(c, _score(c, norm, error_codes)) for c in chunks]
     scored = [(c, s) for c, s in scored if s > 0]

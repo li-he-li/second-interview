@@ -66,7 +66,7 @@ python -m agent.cli --llm real --session
 ## 功能边界
 
 - ✅ 单轮 CLI 输入 + 交互式 REPL，均支持 ESC 打断。
-- ✅ 交互式会话提供类似 Claude Code 的终端工作台：横幅、聊天式回复、**数字选择审批**（1/2/3 而非手输 yes/no）、斜杠命令（/help /status /clear /json /exit），完整 JSON 用 `/json` 按需查看而非每轮打印。
+- ✅ 交互式会话提供类似 Claude Code / Codex 的终端工作台：横幅、聊天式回复、`yes/no/allyes` 审批、斜杠命令（/help /status /clear /trace /exit）；交互窗口不直接渲染完整 JSON，结构化结果写入 `runs/` 供代码/调用方使用。
 - ✅ mock LLM（默认）+ 真实 DeepSeek LLM 两种模式。
 - ✅ 本地知识库检索，输出 `sources`。
 - ✅ 五类意图识别：`qa / status_check / device_action / unsafe_action / unknown`。

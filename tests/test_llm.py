@@ -39,11 +39,13 @@ def test_enhance_prompt_extracts_error_code():
 
 def test_mock_llm_normal_outputs_parsed_draft():
     llm = MockLLM()
-    ctx = _ctx("设备报错 E42 怎么排查", intent_candidates=["qa"])
+    ctx = _ctx("设备报错 E42 怎么排查")
     result = llm.generate(ctx)
     assert result.error is None
     assert result.parsed is not None
-    assert result.parsed["intent"] == "qa"
+    # E42 → MockLLM 决定调 search_knowledge（final=false）
+    assert result.parsed["final"] is False
+    assert result.parsed["tool_calls"][0]["tool"] == "search_knowledge"
     assert result.mode == "mock"
 
 
@@ -67,12 +69,13 @@ def test_mock_llm_simulate_error():
     assert result.error == "model_error"
 
 
-def test_mock_llm_unsafe_draft_is_l2():
+def test_mock_llm_unsafe_input_skips_tools():
+    # 危险输入：MockLLM 直接 final=true（不调工具，安全等级由 runner 本地定）
     llm = MockLLM()
-    ctx = _ctx("最大速度 x=9999", intent_candidates=["unsafe_action"])
+    ctx = _ctx("最大速度 x=9999")
     result = llm.generate(ctx)
-    assert result.parsed["safety_level"] == "L2"
-    assert result.parsed["need_human_approval"] is True
+    assert result.parsed["final"] is True
+    assert result.parsed["tool_calls"] == []
 
 
 def test_real_llm_missing_key_reports_error():
@@ -105,7 +108,7 @@ def test_real_llm_live_call_returns_valid_result_or_fallback():
     cfg = load_app_config().llm
     api_key = os.getenv("DEEPSEEK_API_KEY")
     llm = RealLLM(api_key, cfg["base_url"], cfg["model"], {**cfg, "timeout_seconds": 30, "max_retries": 2})
-    result = llm.generate(_ctx("设备报错 E42 怎么排查", intent_candidates=["qa"]))
+    result = llm.generate(_ctx("设备报错 E42 怎么排查"))
     assert result.mode == "real"
     assert result.parsed is not None or result.error in {
         "model_timeout",
@@ -167,35 +170,36 @@ def test_real_llm_client_init_failure_reported():
     assert result.error == "model_error:client_init:ImportError"
 
 
-def test_validate_draft_accepts_valid():
-    from agent.llm import validate_draft
+def test_validate_loop_output_accepts_valid():
+    from agent.llm import validate_loop_output
 
-    resp, err = validate_draft(
-        {"answer": "a", "intent": "qa", "safety_level": "L0", "confidence": 0.8,
-         "need_human_approval": False, "final_action": "x"}
+    out, err = validate_loop_output(
+        {"answer": "a", "tool_calls": [{"tool": "search_knowledge", "input": {"query": "x"}}], "final": False}
     )
-    assert err is None and resp is not None
-    assert resp.intent.value == "qa"
+    assert err is None and out is not None
+    assert out["tool_calls"][0]["tool"] == "search_knowledge"
+    assert out["final"] is False
 
 
-def test_validate_draft_rejects_bad_intent_enum():
-    from agent.llm import validate_draft
+def test_validate_loop_output_final_defaults_when_no_tools():
+    from agent.llm import validate_loop_output
 
-    resp, err = validate_draft({"intent": "bogus", "safety_level": "L0", "confidence": 0.5})
-    assert resp is None
-    assert err.startswith("schema_invalid")
-
-
-def test_validate_draft_rejects_confidence_out_of_range():
-    from agent.llm import validate_draft
-
-    resp, err = validate_draft({"intent": "qa", "safety_level": "L0", "confidence": 5.0})
-    assert resp is None and err.startswith("schema_invalid")
+    out, err = validate_loop_output({"answer": "hi"})
+    assert err is None
+    assert out["final"] is True  # 无工具默认 final
+    assert out["tool_calls"] == []
 
 
-def test_validate_draft_rejects_non_dict():
-    from agent.llm import validate_draft
+def test_validate_loop_output_normalizes_bad_tool_calls():
+    from agent.llm import validate_loop_output
 
-    resp, err = validate_draft("not a dict")
-    assert resp is None
+    out, _ = validate_loop_output({"answer": "a", "tool_calls": ["not_a_dict", {"tool": 123}]})
+    assert out["tool_calls"] == []  # 非法 tool_calls 被过滤
+
+
+def test_validate_loop_output_rejects_non_dict():
+    from agent.llm import validate_loop_output
+
+    out, err = validate_loop_output("not a dict")
+    assert out is None
     assert err == "schema_invalid:not_a_dict"

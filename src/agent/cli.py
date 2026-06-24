@@ -1,8 +1,8 @@
 """CLI 入口：单轮命令 + Claude Code 风格交互式 REPL，支持 ESC 打断。
 
 单轮命令输出结构化 JSON（适合管道/测试）；REPL 以聊天式为主：
-answer 为主要输出，元数据与工具调用以简要摘要呈现，完整 JSON 用 /json 查看。
-审批采用数字选择而非手输 yes/no/allyes。
+    answer 为主要输出，元数据与工具调用以简要摘要呈现；完整 JSON 保存到 runs/。
+    审批明确显示 yes/no/allyes，便于用户做安全确认。
 
 用法：
     python -m agent.cli "设备报错 E42，应该怎么排查？"
@@ -24,7 +24,7 @@ from .interrupt import CancellationToken, EscListener
 from .models import SafetyLevel
 from .runner import Agent
 
-# 上一轮结构化结果，供 /json 回看
+# 上一轮结构化结果，仅用于交互层生成 trace 提示，不默认渲染给用户
 _last_payload: Optional[dict[str, Any]] = None
 
 
@@ -67,35 +67,87 @@ def _tool_brief(t: dict[str, Any]) -> str:
     return f"{name}({_color(mark, st_color)}{detail})"
 
 
+def _brief_input(inp: dict) -> str:
+    if not inp:
+        return ""
+    if "query" in inp:
+        q = str(inp.get("query", ""))[:40]
+        return f'"{q}"'
+    if "command" in inp:
+        return json.dumps(inp.get("command"), ensure_ascii=False)[:50]
+    return json.dumps(inp, ensure_ascii=False)[:40]
+
+
+def _make_event_handler():
+    """agent loop 事件 → Claude Code 式实时显示（LLM 回复 + 工具调用友好提示，不渲染 JSON）。"""
+
+    def on_event(event: str, payload: Any) -> None:
+        if event == "answer" and payload:
+            print(payload)
+        elif event == "tool_call":
+            name = payload.get("tool", "?")
+            brief = _brief_input(payload.get("input") or {})
+            print(_color(f"● {name}", "36;1") + (f"  {brief}" if brief else ""))
+        elif event == "tool_result":
+            tdict = {"tool": payload.tool, "status": payload.status.value, "output": payload.output}
+            print(_color(f"  ↳ {_tool_brief(tdict)}", "90"))
+
+    return on_event
+
+
 def _cli_responder(req) -> str:
-    """审批：数字选择 1/2/3，而非手输 yes/no/allyes。"""
+    """审批：明确输入 yes/no/allyes；兼容 y/n/1/2/3 快捷输入。"""
 
     print()
     print(_rule("approval"))
     print(f"│ level: {_level_label(req.safety_level)}  tool: {req.tool_name}")
     print(f"│ risk : {req.risk_reason}")
-    print("│  1) yes      批准本次")
-    print("│  2) no       拒绝（工具记 skipped）")
-    print("│  3) allyes   本会话全部放行（仍不真实执行危险动作）")
+    print("│  yes     批准本次")
+    print("│  no      拒绝（工具记 skipped）")
+    print("│  allyes  本会话全部放行（仍不真实执行危险动作）")
     try:
-        choice = input(_color("╰─ 选择 [1-3] (默认 2): ", "33;1")).strip()
+        choice = input(_color("╰─ 选择 [yes/no/allyes] (默认 no): ", "33;1")).strip().lower()
     except (EOFError, KeyboardInterrupt):
         print()
         return "no"  # 非交互或取消时安全拒绝
-    return {"1": "yes", "2": "no", "3": "allyes"}.get(choice, "no")
+    return {
+        "yes": "yes",
+        "y": "yes",
+        "1": "yes",
+        "no": "no",
+        "n": "no",
+        "2": "no",
+        "allyes": "allyes",
+        "all": "allyes",
+        "3": "allyes",
+    }.get(choice, "no")
 
 
 def _run_once(agent: Agent, text: str, *, interactive: bool = False) -> None:
+    global _last_payload
     token = CancellationToken()
     listener = EscListener(token)
     listener.start()
+
+    def responder(req):
+        # 审批期间需要读取用户输入，暂停 ESC 后台监听，避免 Windows msvcrt 抢键盘字节。
+        listener.stop()
+        try:
+            return _cli_responder(req)
+        finally:
+            if not token.is_cancelled():
+                listener.start()
+
+    on_event = _make_event_handler() if interactive else None
     try:
-        resp = agent.handle(text, cancel_token=token, responder=_cli_responder)
+        resp = agent.handle(text, cancel_token=token, responder=responder, on_event=on_event)
     finally:
         listener.stop()
     payload = resp.model_dump(mode="json")
+    _last_payload = payload
     if interactive:
-        _print_chat(payload)
+        print()  # answer 已在 loop 中实时显示，这里仅输出元数据
+        _print_meta(payload)
     else:
         # 单轮：打印结构化 JSON（适合管道与题目验收）
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -105,7 +157,7 @@ def _print_banner(agent: Agent) -> None:
     print(_rule("device safety agent"))
     print("│ 制造业设备安全操作 CLI（聊天式，类 Claude Code）")
     print(f"│ llm={agent.llm_mode}  session-memory=on  esc=cancel")
-    print("│ commands: /help /status /clear /json /exit")
+    print("│ commands: /help /status /clear /trace /exit")
     print("╰" + "─" * 60)
 
 
@@ -114,7 +166,7 @@ def _print_help() -> None:
     print("│ 直接输入问题或设备指令，回车提交（支持中文）")
     print("│ /status  查看会话/设备状态")
     print("│ /clear   清空短期工作记忆")
-    print("│ /json    查看上一轮完整结构化 JSON")
+    print("│ /trace   提示上一轮结构化 JSON 保存位置")
     print("│ /exit    退出会话")
     print("│ ESC      打断当前运行")
     print("╰" + "─" * 60)
@@ -131,15 +183,14 @@ def _print_status(agent: Agent) -> None:
     print("╰" + "─" * 60)
 
 
-def _print_chat(payload: dict[str, Any]) -> None:
-    """聊天式输出：answer 为主，元数据/工具简要摘要，不默认打印完整 JSON。"""
+def _print_meta(payload: dict[str, Any]) -> None:
+    """agent loop 后的元数据摘要（answer 已在 loop 实时显示；fallback/cancelled 兜底）。"""
 
     global _last_payload
     _last_payload = payload
-    print()
-    # 1) answer 为主要回复（像聊天）
-    print(payload.get("answer", ""))
-    # 2) 简要元数据行（灰色次要信息）
+    action = payload.get("final_action", "")
+    if action in ("fallback", "cancelled_by_user"):
+        print(payload.get("answer", ""))  # loop 未实时显示，这里补
     level = _level_label(payload.get("safety_level", ""))
     meta = f"  {payload.get('intent', 'unknown')} · {level} · conf {payload.get('confidence', 0.0):.2f}"
     tools = payload.get("tool_calls") or []
@@ -152,9 +203,9 @@ def _print_chat(payload: dict[str, Any]) -> None:
     if payload.get("error"):
         print(_color(f"  error: {payload['error'].get('type')}", "31"))
     if payload.get("need_human_approval"):
-        print(_color("  [需人工审批] 输入 /json 查看完整结构化输出", "33"))
+        print(_color("  [需人工审批] 结构化 JSON 已保存到 runs/<trace_id>.json", "33"))
     else:
-        print(_color("  输入 /json 查看完整结构化输出", "90"))
+        print(_color("  结构化 JSON 已保存到 runs/<trace_id>.json（/trace 查看）", "90"))
 
 
 def _repl(agent: Agent) -> None:
@@ -185,9 +236,9 @@ def _repl(agent: Agent) -> None:
             _last_payload = None
             print(_color("session memory cleared", "32"))
             continue
-        if command == "/json":
+        if command == "/trace":
             if _last_payload:
-                print(json.dumps(_last_payload, ensure_ascii=False, indent=2))
+                print(_color("上一轮结构化 JSON 已写入 runs/<trace_id>.json；单轮命令仍会直接输出 JSON。", "90"))
             else:
                 print(_color("尚无运行结果，先输入一个问题吧", "90"))
             continue
@@ -195,8 +246,8 @@ def _repl(agent: Agent) -> None:
 
 
 def main(argv=None) -> None:
-    # 以 UTF-8 处理 stdin/stdout，确保 Windows 下中文输入/输出不乱码
-    for stream in (sys.stdout, sys.stdin):
+    # 仅重配输出流；不重配 stdin，避免 Windows 终端中文输入解码异常。
+    for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             try:
                 stream.reconfigure(encoding="utf-8")

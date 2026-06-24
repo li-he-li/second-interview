@@ -12,7 +12,7 @@ status: in_progress
 - 项目：制造业设备安全操作 Agent（AI Agent 实习二面小项目，CLI-only）。
 - 方案：`plan/initial_solution.md`（v2，已通过 7 项门控校验）。
 - 实现进度：✅ **M1-M11 全部完成**，CLI 端到端可运行（mock + real DeepSeek）。
-- 测试：全量 109 passed 1 skipped（`pytest tests/`，临时目录由 `conftest.py` 动态生成）；详见 `docs/03-tests/2026-06-24.md`。
+- 测试：全量 117 passed 1 skipped（`pytest tests/`，临时目录由 `conftest.py` 动态生成）；详见 `docs/03-tests/2026-06-24.md`。
 - 安全：真实 DeepSeek key 仅存 `.env`（已 gitignore）；`.env.example` 不含真实值；源码无硬编码；L2 审批硬约束不可配置绕过。
 - 尚未完成：无（README 到岗信息由候选人填写）。
 
@@ -23,7 +23,7 @@ status: in_progress
   - `models.py`：Pydantic 数据模型（AgentResponse 等）。
   - `config.py`：三份配置加载与保守回退。
   - `trace.py`：trace_id / TraceRecorder / setup_logging。
-  - `knowledge.py / intent.py / safety.py / approval.py / memory.py / interrupt.py / llm.py / tools.py / runner.py / cli.py`：待实现。
+- `knowledge.py / intent.py / safety.py / approval.py / memory.py / interrupt.py / llm.py / tools.py / runner.py / cli.py`：核心模块，均已实现并接入主流程。
 - `config/`：`safety_rules.json`、`llm_config.json`、`memory_config.json`。
 - `tests/`：正式自动化测试（pytest）。
 - `.temp/`：一次性验证、排障脚本（已 gitignore）。
@@ -53,6 +53,8 @@ status: in_progress
 - 2026-06-24：**审查修复#4** —— SYSTEM_PROMPT injection 防护 + validate_draft schema 校验 + RealLLM 流式 cancel 单测 + client_init 区分；95 passed 1 skipped。
 - 2026-06-24：**M10 完成** —— runner.py 完整数据流 + cli.py 单轮/REPL/ESC；CLI 端到端验证通过；105 passed 1 skipped。
 - 2026-06-24：**M11 完成** —— README + test_failures + 5 条 runs 证据；109 passed 1 skipped；**M1-M11 全部完成**。
+- 2026-06-24：**最终审查修复** —— CLI real key/model 传递、runner 接入 `search_knowledge` 工具链路、未知型号不硬答、删除 egg-info 产物；113 passed 1 skipped；CLI 题目样例通过。
+- 2026-06-24：**交互式 CLI 改造** —— `--session` 改为类 Claude Code / Codex 工作台式界面；交互窗口不直接渲染完整 JSON，单轮模式保持纯 JSON；117 passed 1 skipped。
 
 ## 待确认
 

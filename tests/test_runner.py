@@ -26,6 +26,13 @@ def test_sample2_qa_e42_has_sources():
     assert any(tc.tool == "search_knowledge" and tc.status == ToolCallStatus.SUCCESS for tc in r.tool_calls)
 
 
+def test_local_qa_not_overridden_by_llm_unknown():
+    r = _agent().handle("设备报错 E42")
+    assert r.intent == Intent.QA
+    assert r.safety_level == SafetyLevel.L0
+    assert r.need_human_approval is False
+
+
 def test_sample3_device_action_l1_approved_runs_dry_run():
     r = _agent().handle("把机械臂移动到 x=100, y=50, z=20，并抓取零件。", responder=lambda _req: "yes")
     assert r.intent == Intent.DEVICE_ACTION
@@ -51,7 +58,7 @@ def test_sample5_chat_smalltalk_skips_tools():
     assert r.safety_level == SafetyLevel.L0
     assert r.need_human_approval is False
     assert r.tool_calls == []
-    assert r.final_action == "chat"
+    assert r.final_action == "answered"
 
 
 def test_unknown_device_model_returns_l2_without_fabrication():
@@ -83,10 +90,12 @@ def test_esc_cancel_returns_cancelled_json():
     assert r.safety_level == SafetyLevel.L2
 
 
-def test_invalid_json_falls_back_to_rules():
+def test_invalid_json_falls_back_gracefully():
     r = _agent(simulate="invalid_json").handle("设备报错 E42，应该怎么排查？")
-    assert r.intent == Intent.QA  # 规则兜底仍正确分类
-    assert any("e42" in s.lower() for s in r.sources)  # 来源来自真实检索
+    assert r.error is not None
+    assert r.error.type == "model_invalid_json"
+    assert r.intent == Intent.QA  # 规则兜底仍分类
+    assert r.sources == []  # LLM 故障无法检索，不编造来源
 
 
 def test_search_knowledge_timeout_is_reported_as_failed_tool():

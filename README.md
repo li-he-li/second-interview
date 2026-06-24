@@ -22,6 +22,17 @@ source .venv/bin/activate && pip install -e ".[dev]"
 
 ### 运行（默认 mock，无需 key）
 
+先激活虚拟环境（每个新终端执行一次）：
+
+```bash
+# Windows (Git Bash / CMD / PowerShell)
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+```
+
+激活后即可运行（若不想激活，可将下方 `python` 替换为 `.venv\Scripts\python.exe` 或 `.venv/bin/python`）：
+
 ```bash
 # 单轮
 python -m agent.cli "设备报错 E42，应该怎么排查？"

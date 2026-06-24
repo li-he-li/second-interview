@@ -22,3 +22,8 @@ cache/
 
 # Note: runs/ is intentionally NOT ignored — selected runs/<trace_id>.json
 # are kept as submission evidence per the task requirement.
+
+# 非交付文件（AI 工具规范、题目原文，不入仓库）
+CLAUDE.md
+AGENTS.md
+二面题目-*.md

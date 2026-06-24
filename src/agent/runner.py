@@ -16,7 +16,7 @@ from typing import Optional
 from .approval import ApprovalGate, ApprovalRequest, approval_key
 from .config import AppConfig, load_app_config
 from .interrupt import CancellationToken, CancelledError
-from .intent import classify
+from .intent import classify, has_device_signal
 from .knowledge import KnowledgeBase, normalize
 from .llm import enhance_prompt, make_llm, validate_draft
 from .memory import MemoryConfig, WorkingMemory
@@ -28,6 +28,7 @@ from .tools import (
     ToolTimeout,
     execute_device_command,
     get_device_status,
+    search_knowledge,
 )
 from .trace import TraceRecorder, setup_logging
 
@@ -57,14 +58,21 @@ class Agent:
         approval_gate: Optional[ApprovalGate] = None,
         memory: Optional[WorkingMemory] = None,
         simulate: Optional[str] = None,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        tool_simulate: Optional[str] = None,
     ) -> None:
         self.llm_mode = llm_mode
         self.cfg = app_config or load_app_config()
         self.kb = kb or KnowledgeBase.load()
         self.memory = memory or WorkingMemory()
         self.approval = approval_gate or ApprovalGate()
-        self.llm = llm or make_llm(llm_mode, llm_cfg=self.cfg.llm, simulate=simulate)
+        llm_cfg = dict(self.cfg.llm)
+        if model:
+            llm_cfg["model"] = model
+        self.llm = llm or make_llm(llm_mode, api_key=api_key, llm_cfg=llm_cfg, simulate=simulate)
         self.mem_cfg = MemoryConfig.from_dict(self.cfg.memory)
+        self.tool_simulate = tool_simulate
         self.logger = setup_logging()
 
     def handle(
@@ -87,7 +95,12 @@ class Agent:
                 return self._fallback(trace, Intent.UNKNOWN, SafetyLevel.L2, "输入为空，无法判断意图。", "invalid_input:empty")
 
             token.check()
-            matches = self.kb.search(raw_input)
+            # 意图驱动：闲聊/问候（unknown 且无设备信号）→ LLM 自由对话，不检索/不工具/不审批
+            if classify(raw_input) == Intent.UNKNOWN and not has_device_signal(raw_input):
+                return self._chat(raw_input, trace, token)
+
+            token.check()
+            matches, retrieval_call = self._search_knowledge(raw_input, trace, token)
             trace.set("retrieval", [{"source": m.source, "score": m.score} for m in matches])
 
             token.check()
@@ -111,11 +124,22 @@ class Agent:
 
             token.check()
             assessment = evaluate(raw_input, intent, device_status=device_status, safety_cfg=self.cfg.safety)
+            if not matches and intent in (Intent.QA, Intent.UNKNOWN) and assessment.level != SafetyLevel.L2:
+                assessment.level = SafetyLevel.L2
+                assessment.need_human_approval = True
+                assessment.reasons.append("knowledge_not_found")
+                assessment.risk_hints.append("knowledge_not_found")
+            if retrieval_call.status == ToolCallStatus.FAILED and assessment.level != SafetyLevel.L2:
+                assessment.level = SafetyLevel.L2
+                assessment.need_human_approval = True
+                assessment.reasons.append("tool_failed:search_knowledge")
+                assessment.risk_hints.append("tool_failed")
             for hint in assessment.risk_hints:
                 self.memory.add_safety_fact(f"{intent.value}:{hint}")
 
             token.check()
-            tool_calls = self._run_tools(intent, assessment, raw_input, device_status, responder, trace, token)
+            tool_calls = [retrieval_call]
+            tool_calls.extend(self._run_tools(intent, assessment, raw_input, device_status, responder, trace, token))
 
             token.check()
             response = self._build_response(llm_result, intent, assessment, matches, tool_calls)
@@ -170,6 +194,39 @@ class Agent:
             # L2 一律走审批，但审批通过也只允许诊断/解释，不真实执行
             self._ask_approval(assessment, "l2_review", raw_input, responder, trace)
         return calls
+
+    def _search_knowledge(self, raw_input, trace, token):
+        token.check()
+        inp = {"query": raw_input}
+        try:
+            out = search_knowledge(raw_input, self.kb, simulate=self.tool_simulate)
+            source_ids = [m["source"] for m in out.get("matches", [])]
+            by_source = {m.source: m for m in self.kb.search(raw_input)}
+            matches = [by_source[s] for s in source_ids if s in by_source]
+            return matches, ToolCall(
+                tool="search_knowledge",
+                input=inp,
+                output=out,
+                status=ToolCallStatus.SUCCESS,
+            )
+        except ToolTimeout:
+            trace.append("warnings", "tool_timeout:search_knowledge")
+            self.memory.add_safety_fact("tool_failed:search_knowledge_timeout")
+            return [], ToolCall(
+                tool="search_knowledge",
+                input=inp,
+                output={"error": "timeout"},
+                status=ToolCallStatus.FAILED,
+            )
+        except ToolError as exc:
+            trace.append("warnings", f"tool_error:search_knowledge:{exc}")
+            self.memory.add_safety_fact("tool_failed:search_knowledge_error")
+            return [], ToolCall(
+                tool="search_knowledge",
+                input=inp,
+                output={"error": str(exc)},
+                status=ToolCallStatus.FAILED,
+            )
 
     def _ask_approval(self, assessment, tool_name, raw_input, responder, trace) -> bool:
         req = ApprovalRequest(assessment.level, tool_name, normalize(raw_input), ";".join(assessment.reasons))
@@ -286,4 +343,40 @@ class Agent:
         )
         trace.set("final_json", resp.model_dump(mode="json"))
         trace.save()
+        return resp
+
+    def _chat(self, raw_input: str, trace, token) -> AgentResponse:
+        """闲聊/自由对话：LLM 自由回答，L0，不检索/不工具/不审批。
+
+        real 模式由 LLM 自由对话；mock 模式给友好默认回复。
+        结构化 JSON / 工具链路是为"需要工具的场景"设计的，闲聊不进入该链路。
+        """
+
+        trace.set("branch", "chat")
+        enhanced = self._safe_enhance(raw_input, [], trace)
+        token.check()
+        llm_result = self.llm.generate(enhanced, cancel_token=token)
+        trace.set("llm_raw_output", (llm_result.raw_output or "")[:500])
+        validated, _ = validate_draft(llm_result.parsed) if llm_result.parsed else (None, None)
+        default = "你好，我是制造业设备安全操作 Agent，可以回答设备说明、故障排查、安全规则，或执行经审批的 dry-run 动作。"
+        if self.llm_mode == "real" and validated and validated.answer:
+            answer = validated.answer
+        else:
+            answer = default
+        resp = AgentResponse(
+            answer=answer,
+            intent=Intent.UNKNOWN,
+            sources=[],
+            confidence=0.6,
+            safety_level=SafetyLevel.L0,
+            need_human_approval=False,
+            tool_calls=[],
+            final_action="chat",
+            error=None,
+        )
+        self.memory.add_turn("user", raw_input, trace.trace_id)
+        self.memory.add_turn("assistant", answer, trace.trace_id)
+        trace.set("final_json", resp.model_dump(mode="json"))
+        trace.save()
+        self.logger.info("trace %s intent=chat level=L0", trace.trace_id)
         return resp

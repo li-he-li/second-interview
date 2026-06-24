@@ -23,6 +23,7 @@ def test_sample2_qa_e42_has_sources():
     assert r.intent == Intent.QA
     assert r.safety_level == SafetyLevel.L0
     assert any("e42" in s.lower() for s in r.sources)
+    assert any(tc.tool == "search_knowledge" and tc.status == ToolCallStatus.SUCCESS for tc in r.tool_calls)
 
 
 def test_sample3_device_action_l1_approved_runs_dry_run():
@@ -44,11 +45,20 @@ def test_sample4_unsafe_l2_no_real_execution():
     )
 
 
-def test_sample5_no_knowledge_low_confidence_no_fabrication():
-    # 无关查询：检索为空时不编造来源、低置信度
+def test_sample5_chat_smalltalk_skips_tools():
+    # 闲聊/问候（unknown 无设备信号）→ L0 自由对话，不检索/不工具/不审批
     r = _agent().handle("今天午饭吃什么呀")
-    assert r.confidence <= 0.4
-    assert r.sources == []  # 不编造来源
+    assert r.safety_level == SafetyLevel.L0
+    assert r.need_human_approval is False
+    assert r.tool_calls == []
+    assert r.final_action == "chat"
+
+
+def test_unknown_device_model_returns_l2_without_fabrication():
+    r = _agent().handle("QX999 设备的专用润滑周期是什么？")
+    assert r.sources == []
+    assert r.safety_level == SafetyLevel.L2
+    assert r.need_human_approval is True
 
 
 def test_empty_input_unknown_l2():
@@ -77,6 +87,14 @@ def test_invalid_json_falls_back_to_rules():
     r = _agent(simulate="invalid_json").handle("设备报错 E42，应该怎么排查？")
     assert r.intent == Intent.QA  # 规则兜底仍正确分类
     assert any("e42" in s.lower() for s in r.sources)  # 来源来自真实检索
+
+
+def test_search_knowledge_timeout_is_reported_as_failed_tool():
+    r = Agent(llm_mode="mock", tool_simulate="timeout").handle("设备报错 E42")
+    assert r.sources == []
+    assert r.tool_calls[0].tool == "search_knowledge"
+    assert r.tool_calls[0].status == ToolCallStatus.FAILED
+    assert r.safety_level == SafetyLevel.L2
 
 
 def test_trace_file_written_to_runs():

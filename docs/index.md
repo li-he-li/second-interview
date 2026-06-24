@@ -11,12 +11,10 @@ status: in_progress
 
 - 项目：制造业设备安全操作 Agent（AI Agent 实习二面小项目，CLI-only）。
 - 方案：`plan/initial_solution.md`（v2，已通过 7 项门控校验）。
-- 实现进度：
-  - ✅ M1-M10（基础设施/知识库/工具/意图/安全/审批/记忆/打断/LLM/Runner+CLI）
-  - ⏳ 进行中：M11 测试套件补全 + README + runs 证据
-- 测试：全量 105 passed 1 skipped（`pytest tests/`，临时目录由 `conftest.py` 动态生成）；详见 `docs/03-tests/2026-06-24.md`。
+- 实现进度：✅ **M1-M11 全部完成**，CLI 端到端可运行（mock + real DeepSeek）。
+- 测试：全量 109 passed 1 skipped（`pytest tests/`，临时目录由 `conftest.py` 动态生成）；详见 `docs/03-tests/2026-06-24.md`。
 - 安全：真实 DeepSeek key 仅存 `.env`（已 gitignore）；`.env.example` 不含真实值；源码无硬编码；L2 审批硬约束不可配置绕过。
-- 尚未完成：README、runs 证据挑选。
+- 尚未完成：无（README 到岗信息由候选人填写）。
 
 ## 模块地图
 
@@ -54,6 +52,7 @@ status: in_progress
 - 2026-06-24：**M9 完成** —— llm.py mock+real DeepSeek + enhance_prompt + ESC 接入流式；real 连通验证通过；89 passed 1 skipped。
 - 2026-06-24：**审查修复#4** —— SYSTEM_PROMPT injection 防护 + validate_draft schema 校验 + RealLLM 流式 cancel 单测 + client_init 区分；95 passed 1 skipped。
 - 2026-06-24：**M10 完成** —— runner.py 完整数据流 + cli.py 单轮/REPL/ESC；CLI 端到端验证通过；105 passed 1 skipped。
+- 2026-06-24：**M11 完成** —— README + test_failures + 5 条 runs 证据；109 passed 1 skipped；**M1-M11 全部完成**。
 
 ## 待确认
 

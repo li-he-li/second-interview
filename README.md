@@ -65,6 +65,23 @@ python -m agent.cli --llm real --session
 
 临时目录由 `conftest.py` 动态生成项目内唯一子目录（`.temp/pytest-<时间戳>-<pid>`），避免系统 temp 权限问题；pytest cache 已禁用。
 
+### Git Hooks（可选）
+
+提交质量门控（防私钥泄露 + 防大文件 + 规范 commit message）：
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit install --hook-type commit-msg   # 启用 commit message 校验
+```
+
+之后每次 `git commit` 自动运行：
+- `detect-private-key` —— 拦截 SSH/API 私钥
+- `check-added-large-files` —— 拦截 >500KB 文件
+- `conventional-pre-commit` —— 校验 `type: 描述` 格式（feat/fix/docs/chore/ci/…）
+
+手动全量检查：`pre-commit run --all-files`；紧急跳过：`git commit --no-verify`。
+
 ---
 
 ## 功能边界

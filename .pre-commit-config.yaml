@@ -1,0 +1,16 @@
+# Pre-commit hooks（极简版：防私钥泄露 + 防大文件 + 规范 commit message）
+# 首次安装：pip install pre-commit && pre-commit install && pre-commit install --hook-type commit-msg
+# 手动检查：pre-commit run --all-files
+# 紧急跳过：git commit --no-verify
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: detect-private-key       # 防止提交 SSH/API 私钥（安全门控）
+      - id: check-added-large-files  # 防止误提交大文件
+        args: ['--maxkb=500']
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.2.0
+    hooks:
+      - id: conventional-pre-commit  # 强制 conventional commits: type(scope): desc
+        stages: [commit-msg]

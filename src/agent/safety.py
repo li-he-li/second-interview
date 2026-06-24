@@ -22,6 +22,7 @@ from .models import Intent, SafetyLevel
 DEFAULT_COORD_LIMITS = {"x": [-1000, 1000], "y": [-1000, 1000], "z": [-1000, 1000]}
 DEFAULT_ALLOWED_SPEEDS = ["low", "normal", "safe"]
 DEFAULT_MAX_FORCE = 50
+DEFAULT_MAX_DISTANCE = 1000  # 单次相对移动距离上限（保守数值阈值；LLM 可能用 cm/mm/m，取保守）
 DEFAULT_DANGER_KEYWORDS = ["最大速度", "强制执行", "绕过安全", "禁用保护", "急停解除", "超限", "直接执行"]
 
 
@@ -55,7 +56,11 @@ def parse_params(raw_text: str) -> dict[str, Any]:
     m = re.search(r"(?:力度|力|force|newton)\s*=\s*(\d+)", text)
     if m:
         force = int(m.group(1))
-    return {"coordinates": coords, "speed": speed, "force": force}
+    distance: Optional[int] = None
+    m = re.search(r"(?:distance|距离|移动)\s*[=:]?\s*(\d+)", text)
+    if m:
+        distance = int(m.group(1))
+    return {"coordinates": coords, "speed": speed, "force": force, "distance": distance}
 
 
 def detect_danger_words(raw_text: str, safety_cfg: dict) -> list[str]:
@@ -85,6 +90,11 @@ def check_param_risks(params: dict[str, Any], safety_cfg: dict) -> tuple[list[st
         if params["force"] > max_force:
             hints.append("force_exceeds_limit")
             reasons.append(f"force={params['force']} > max {max_force}")
+    if params.get("distance") is not None:
+        max_distance = safety_cfg.get("max_distance", DEFAULT_MAX_DISTANCE)
+        if params["distance"] > max_distance:
+            hints.append("distance_out_of_range")
+            reasons.append(f"distance={params['distance']} > max {max_distance}")
     return hints, reasons
 
 

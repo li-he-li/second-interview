@@ -6,6 +6,7 @@
   },
   "allowed_speeds": ["low", "normal", "safe"],
   "max_force_newton": 50,
+  "max_distance": 1000,
   "block_when_emergency_stop": true,
   "block_when_offline": true,
   "block_when_maintenance": true,

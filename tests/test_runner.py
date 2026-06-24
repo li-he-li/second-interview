@@ -115,3 +115,10 @@ def test_trace_file_written_to_runs():
     _agent().handle("设备报错 E42")
     after = len(list(runs.glob("*.json")))
     assert after > before
+
+
+def test_distance_out_of_range_upgrades_to_l2():
+    # direction/distance 类命令越界 → L2（修复 distance 不被 safety 检查的缺口）
+    r = _agent().handle("驱动机械臂向前移动 3000000cm")
+    assert r.safety_level == SafetyLevel.L2
+    assert r.need_human_approval is True

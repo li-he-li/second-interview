@@ -92,6 +92,9 @@ def _command_to_safety_text(command: Any) -> str:
     force = command.get("force") or command.get("force_newton") or command.get("newton")
     if force is not None:
         parts.append(f"力度={force}")
+    distance = command.get("distance") or command.get("distance_mm") or command.get("distance_cm")
+    if distance is not None:
+        parts.append(f"distance={distance}")
 
     parts.append(json_dumps(command))
     return " ".join(parts)

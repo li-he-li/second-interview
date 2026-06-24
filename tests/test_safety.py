@@ -106,3 +106,22 @@ def test_l2_approval_cannot_be_disabled_by_config():
     )
     assert a.level == SafetyLevel.L2
     assert a.need_human_approval is True
+
+
+def test_parse_params_extracts_distance():
+    p = parse_params("向前移动 3000000cm")
+    assert p["distance"] == 3000000
+
+
+def test_check_param_risks_distance_out_of_range():
+    hints, _ = check_param_risks(
+        {"coordinates": {}, "speed": None, "force": None, "distance": 3000000}, {}
+    )
+    assert "distance_out_of_range" in hints
+
+
+def test_check_param_risks_distance_within_limit():
+    hints, _ = check_param_risks(
+        {"coordinates": {}, "speed": None, "force": None, "distance": 20}, {}
+    )
+    assert "distance_out_of_range" not in hints

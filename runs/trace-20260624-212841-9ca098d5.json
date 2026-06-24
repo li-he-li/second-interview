@@ -1,0 +1,53 @@
+{
+  "trace_id": "trace-20260624-212841-9ca098d5",
+  "timestamp": "2026-06-24T21:28:41",
+  "warnings": [],
+  "raw_input": "QX999 设备的专用润滑周期是什么？",
+  "llm_mode": "mock",
+  "llm_rounds": [
+    {
+      "raw": "{\"answer\": \"让我查一下知识库。\", \"tool_calls\": [{\"tool\": \"search_knowledge\", \"input\": {\"query\": \"qx999 设备的专用润滑周期是什么?\"}}], \"final\": false}",
+      "error": null
+    },
+    {
+      "raw": "{\"answer\": \"知识库没有相关资料，无法确认，建议人工复核。\", \"tool_calls\": [], \"final\": true}",
+      "error": null
+    }
+  ],
+  "approvals": [
+    {
+      "tool": "safety_review",
+      "decision": "auto_no",
+      "approved": false
+    }
+  ],
+  "memory_compress": {
+    "compressed": false,
+    "hard_trimmed": false,
+    "tokens_before": 39,
+    "tokens_after": 39
+  },
+  "final_json": {
+    "answer": "知识库没有相关资料，无法确认，建议人工复核。",
+    "intent": "qa",
+    "sources": [],
+    "confidence": 0.35,
+    "safety_level": "L2",
+    "need_human_approval": true,
+    "tool_calls": [
+      {
+        "tool": "search_knowledge",
+        "input": {
+          "query": "qx999 设备的专用润滑周期是什么?"
+        },
+        "output": {
+          "count": 0,
+          "matches": []
+        },
+        "status": "success"
+      }
+    ],
+    "final_action": "blocked_or_review_only",
+    "error": null
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "trace_id": "trace-20260624-212840-bcddf117",
+  "timestamp": "2026-06-24T21:28:40",
+  "warnings": [],
+  "raw_input": "设备报错 E42",
+  "llm_mode": "mock",
+  "llm_rounds": [
+    {
+      "raw": "{\"answer\": \"a\", \"intent\": \"qa\", \"sources\": [\"troubleshooting.md#e42-夹爪气压传感器异常\", \"FAKE.md#nonexistent\", \"made_up.md#x\"], \"confidence\": 0.8, \"safety_level\": \"L0\", \"need_human_approval\": false, \"final_action\": \"x\"}",
+      "error": null
+    }
+  ],
+  "memory_compress": {
+    "compressed": false,
+    "hard_trimmed": false,
+    "tokens_before": 8,
+    "tokens_after": 8
+  },
+  "final_json": {
+    "answer": "a",
+    "intent": "qa",
+    "sources": [
+      "troubleshooting.md#e42-夹爪气压传感器异常"
+    ],
+    "confidence": 0.5,
+    "safety_level": "L0",
+    "need_human_approval": false,
+    "tool_calls": [],
+    "final_action": "answered",
+    "error": null
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "trace_id": "trace-20260624-212840-5b62a52d",
+  "timestamp": "2026-06-24T21:28:40",
+  "warnings": [],
+  "raw_input": "移动机械臂",
+  "llm_mode": "mock",
+  "llm_rounds": [
+    {
+      "raw": "{\"answer\": \"我来执行\", \"tool_calls\": [{\"tool\": \"execute_device_command\", \"input\": {\"command\": \"not-a-json-object\", \"dry_run\": true}}], \"final\": false}",
+      "error": null
+    },
+    {
+      "raw": "{\"answer\": \"执行失败\", \"tool_calls\": [], \"final\": true}",
+      "error": null
+    }
+  ],
+  "tool_safety_checks": [
+    {
+      "tool": "execute_device_command",
+      "level": "L1",
+      "reasons": [
+        "low_risk_device_action"
+      ],
+      "risk_hints": []
+    }
+  ],
+  "approvals": [
+    {
+      "tool": "execute_device_command",
+      "decision": "yes",
+      "approved": true
+    }
+  ],
+  "memory_compress": {
+    "compressed": false,
+    "hard_trimmed": false,
+    "tokens_before": 11,
+    "tokens_after": 11
+  },
+  "final_json": {
+    "answer": "执行失败",
+    "intent": "device_action",
+    "sources": [],
+    "confidence": 0.25,
+    "safety_level": "L2",
+    "need_human_approval": true,
+    "tool_calls": [
+      {
+        "tool": "execute_device_command",
+        "input": {
+          "command": "not-a-json-object",
+          "dry_run": true
+        },
+        "output": {
+          "error": "command must be a JSON object"
+        },
+        "status": "failed"
+      }
+    ],
+    "final_action": "blocked_or_review_only",
+    "error": null
+  }
+}

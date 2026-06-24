@@ -23,6 +23,18 @@ class _FakeLLM:
         return LLMResult(raw, self.draft, self.error, "mock")
 
 
+class _SequenceLLM:
+    """按顺序返回多轮草稿，用于验证 agent loop 工具门控。"""
+
+    def __init__(self, drafts):
+        self._drafts = list(drafts)
+        self.mode = "mock"
+
+    def generate(self, ctx, cancel_token=None):
+        draft = self._drafts.pop(0) if self._drafts else {"answer": "done", "tool_calls": [], "final": True}
+        return LLMResult(json.dumps(draft, ensure_ascii=False), draft, None, "mock")
+
+
 def test_fabricated_sources_filtered_by_runner():
     fake = _FakeLLM(
         {
@@ -50,6 +62,64 @@ def test_llm_unsafe_level_overridden_by_safety():
     r = Agent(llm_mode="mock", llm=fake).handle("以最大速度移动到 x=9999")
     assert r.safety_level == SafetyLevel.L2  # 不信任 LLM 的 L0
     assert r.need_human_approval is True
+
+
+def test_llm_tool_command_input_is_safety_checked(monkeypatch):
+    # P0 回归：即使用户原文只是状态查询，LLM 提出的设备命令也必须按工具输入重新定级。
+    monkeypatch.setenv("DEVICE_STATUS", "online")
+    fake = _SequenceLLM(
+        [
+            {
+                "answer": "我来执行",
+                "tool_calls": [
+                    {
+                        "tool": "execute_device_command",
+                        "input": {"command": {"action": "move", "x": 9999}, "dry_run": True},
+                    }
+                ],
+                "final": False,
+            },
+            {"answer": "已完成 dry-run", "tool_calls": [], "final": True},
+        ]
+    )
+    approvals = []
+
+    def responder(req):
+        approvals.append((req.safety_level, req.tool_name))
+        return "no"
+
+    r = Agent(llm_mode="mock", llm=fake).handle("机械臂现在状态如何？", responder=responder)
+
+    assert approvals == [(SafetyLevel.L2, "execute_device_command")]
+    assert r.safety_level == SafetyLevel.L2
+    assert r.need_human_approval is True
+    assert r.tool_calls[0].status.value == "skipped"
+
+
+def test_execute_tool_error_is_recorded_as_failed_tool(monkeypatch):
+    # execute_device_command 本身异常也应进入 tool_calls，而不是丢成全局 internal_error。
+    monkeypatch.setenv("DEVICE_STATUS", "online")
+    fake = _SequenceLLM(
+        [
+            {
+                "answer": "我来执行",
+                "tool_calls": [
+                    {
+                        "tool": "execute_device_command",
+                        "input": {"command": "not-a-json-object", "dry_run": True},
+                    }
+                ],
+                "final": False,
+            },
+            {"answer": "执行失败", "tool_calls": [], "final": True},
+        ]
+    )
+
+    r = Agent(llm_mode="mock", llm=fake).handle("移动机械臂", responder=lambda _req: "yes")
+
+    assert r.tool_calls[0].tool == "execute_device_command"
+    assert r.tool_calls[0].status.value == "failed"
+    assert r.safety_level == SafetyLevel.L2
 
 
 def test_runner_works_with_empty_config():

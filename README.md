@@ -45,7 +45,10 @@ python -m agent.cli --session
 
 ```bash
 cp .env.example .env   # 填入 DEEPSEEK_API_KEY
+# 单轮
 python -m agent.cli --llm real --provider deepseek --model deepseek-v4-pro "设备报错 E42，应该怎么排查？"
+# 交互式会话（同样支持 ESC 打断、yes/no/allyes 审批）
+python -m agent.cli --llm real --session
 ```
 
 未配置 key 时，real 模式会明确报错 `no_api_key`，不伪装成功。

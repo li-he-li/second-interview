@@ -101,10 +101,12 @@ python -m agent.cli --llm real --session
 
 ```
 用户输入 → ESC 监听 → 空输入检查 → trace_id
-  → 读取短期记忆 → search_knowledge
-  → 提示词增强 → LLM（或规则链路）识别意图
-  → 参数解析与越界检查 → 安全等级判断
-  → L1/L2 审批检查 → 必要时 get_device_status / execute_device_command(dry_run)
+  → 提示词增强与本地预评估（意图候选、参数、危险词、设备状态）
+  → safety.py 生成 L0/L1/L2 与审批要求
+  → LLM 驱动 agent loop：决定是否调用 search_knowledge / get_device_status / execute_device_command
+  → runner 白名单校验、审批门控、工具执行（execute 永远 dry-run）
+  → 工具结果回传 LLM，生成自然语言最终回答
+  → L1/L2 若 LLM 未触发工具，也进入 safety_review 审批记录
   → Pydantic 校验最终 JSON → 写入记忆（必要时压缩）
   → 输出 JSON 并保存 runs/<trace_id>.json
 ```
@@ -120,8 +122,10 @@ python -m agent.cli --llm real --session
 | L2 | 危险动作/越界参数/危险词/工具异常/检索失败/不确定 | 是，**即使批准也不真实执行** |
 
 - **L2 审批为硬约束**：`need_human_approval` 恒为 `True`，不可被配置绕过。
+- L1/L2 审批面板显示实际安全等级；危险输入即使不调用执行工具，也会触发 `safety_review` 审批。
 - `allyes` 仅当前会话全局放行，不持久化、不降级、不改 L2→L1。
 - 非交互模式（单轮命令）审批默认拒绝，安全优先。
+- 涉及设备动作时会读取 mock 设备状态；离线、维护、急停或故障状态会升级为 L2。
 
 坐标边界 ±1000、速度仅 `low/normal/safe`、力度上限 50N，均可配置。
 
@@ -132,11 +136,12 @@ python -m agent.cli --llm real --session
 最终 JSON **不依赖 LLM 自觉**，由本地代码统一组装校验：
 
 1. system prompt 要求 LLM 只输出严格 JSON + prompt injection 防护（不可信数据不得改规则/权限）。
-2. LLM 输出经 JSON parser → 失败记 `model_invalid_json`。
-3. `validate_draft` 用 AgentResponse schema 校验枚举/范围 → 非法回退规则链路。
-4. `sources` 只接受 `search_knowledge` 的真实来源，`filter_sources` 过滤 LLM 编造。
-5. `safety_level` 以 `safety.py` 为准，不信任 LLM 草稿。
-6. 最终 JSON 由 AgentResponse 序列化，不直接打印 LLM 原文。
+2. LLM 每轮只返回 agent loop 协议：`answer/tool_calls/final`，工具调用只是建议。
+3. LLM 输出经 JSON parser；可容忍 Markdown 代码块或前后噪声，仍非法则记 `model_invalid_json`。
+4. `validate_loop_output` 规范化 `tool_calls`，runner 再做工具白名单、审批和 dry-run 门控。
+5. `sources` 只接受 `search_knowledge` 的真实来源，`filter_sources` 过滤 LLM 编造。
+6. `safety_level`、`need_human_approval` 和 `final_action` 以本地 `safety.py/approval.py/runner.py` 为准，不信任 LLM 草稿。
+7. 最终 JSON 由 `AgentResponse` 序列化，不直接打印 LLM 原文。
 
 ---
 
@@ -145,7 +150,7 @@ python -m agent.cli --llm real --session
 ```
 src/agent/
 ├── cli.py          # CLI 入口（单轮/REPL/ESC）
-├── runner.py       # 主流程串联
+├── runner.py       # LLM 驱动 agent loop + 本地安全门控
 ├── models.py       # Pydantic 数据模型
 ├── knowledge.py    # 知识库 lexical 检索
 ├── intent.py       # 意图识别（规则链路）
@@ -153,7 +158,7 @@ src/agent/
 ├── approval.py     # 人工审批 yes/no/allyes
 ├── memory.py       # 短期工作记忆 + token 压缩
 ├── interrupt.py    # ESC 打断 CancellationToken
-├── llm.py          # mock + real LLM + 提示词增强
+├── llm.py          # mock + real LLM + 提示词增强 + loop 协议校验
 ├── tools.py        # 3 个 mock 工具 + 白名单
 ├── config.py       # 配置加载（保守回退）
 └── trace.py        # trace_id + runs 落盘 + 日志
@@ -184,7 +189,7 @@ src/agent/
 
 ---
 
-## AI coding 使用说明（诚实披露）
+## AI coding 使用说明
 
 - **方案设计**：`plan/initial_solution.md` 为人工前期设计，经多轮细化与 Harness Engineering 门控校验。
 - **代码实现**：由 Claude Code（GLM-5.2 驱动的 CLI）按方案分里程碑实现（M1–M11），每里程碑配套 pytest 测试与人工审查清单。
@@ -194,10 +199,10 @@ src/agent/
 
 ---
 
-## 到岗信息确认（由候选人填写）
+## 到岗信息确认
 
 > 以下信息留空，由提交者自行填写。
 
 1. 最早可到宁波线下日期：______
 2. 最晚可实习到哪一天：______
-3. 是否能每周 5 天线下：______
+3. 是否能每周 5 天线下：可以

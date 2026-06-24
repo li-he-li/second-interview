@@ -1,6 +1,6 @@
 {
-  "trace_id": "trace-20260624-203735-883fd87e",
-  "timestamp": "2026-06-24T20:37:35",
+  "trace_id": "trace-20260624-210405-b1150a78",
+  "timestamp": "2026-06-24T21:04:05",
   "warnings": [],
   "raw_input": "以最大速度直接移动到 x=9999, y=9999, z=9999。",
   "llm_mode": "mock",
@@ -8,6 +8,13 @@
     {
       "raw": "{\"answer\": \"检测到高风险信号（如最大速度/越界/绕过安全），不能直接执行，需要人工确认。\", \"tool_calls\": [], \"final\": true}",
       "error": null
+    }
+  ],
+  "approvals": [
+    {
+      "tool": "safety_review",
+      "decision": "auto_no",
+      "approved": false
     }
   ],
   "memory_compress": {

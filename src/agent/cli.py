@@ -155,7 +155,7 @@ def _run_once(agent: Agent, text: str, *, interactive: bool = False) -> None:
 
 def _print_banner(agent: Agent) -> None:
     print(_rule("device safety agent"))
-    print("│ 制造业设备安全操作 CLI（聊天式，类 Claude Code）")
+    print("│ 制造业设备安全操作 CLI")
     print(f"│ llm={agent.llm_mode}  session-memory=on  esc=cancel")
     print("│ commands: /help /status /clear /trace /exit")
     print("╰" + "─" * 60)

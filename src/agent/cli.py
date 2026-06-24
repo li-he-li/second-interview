@@ -1,4 +1,8 @@
-"""CLI 入口：单轮命令 + 交互式 REPL，支持 ESC 打断当前运行。
+"""CLI 入口：单轮命令 + Claude Code 风格交互式 REPL，支持 ESC 打断。
+
+单轮命令输出结构化 JSON（适合管道/测试）；REPL 以聊天式为主：
+answer 为主要输出，元数据与工具调用以简要摘要呈现，完整 JSON 用 /json 查看。
+审批采用数字选择而非手输 yes/no/allyes。
 
 用法：
     python -m agent.cli "设备报错 E42，应该怎么排查？"
@@ -12,26 +16,76 @@ import argparse
 import json
 import os
 import sys
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 
 from .interrupt import CancellationToken, EscListener
+from .models import SafetyLevel
 from .runner import Agent
+
+# 上一轮结构化结果，供 /json 回看
+_last_payload: Optional[dict[str, Any]] = None
+
+
+def _color(text: str, code: str) -> str:
+    if os.getenv("NO_COLOR") or not sys.stdout.isatty():
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def _rule(title: str = "") -> str:
+    line = "─" * 60
+    return f"╭─ {title} {line[len(title) + 3:]}" if title else f"╭{line}"
+
+
+def _prompt() -> str:
+    return _color("device-safety", "36;1") + _color(" › ", "37")
+
+
+def _level_label(level: SafetyLevel | str) -> str:
+    value = level.value if isinstance(level, SafetyLevel) else str(level)
+    color = {"L0": "32;1", "L1": "33;1", "L2": "31;1"}.get(value, "37")
+    return _color(value, color)
+
+
+def _tool_brief(t: dict[str, Any]) -> str:
+    """工具调用简要摘要：name(status, 关键结果)。"""
+
+    name = t.get("tool", "?")
+    status = t.get("status", "?")
+    mark = {"success": "OK", "failed": "FAIL", "skipped": "SKIP"}.get(status, status)
+    out = t.get("output") or {}
+    detail = ""
+    if name == "search_knowledge":
+        detail = f", {out.get('count', 0)} 条命中"
+    elif name == "get_device_status":
+        detail = f", {out.get('status', '?')}"
+    elif name == "execute_device_command":
+        detail = ", dry-run" if out.get("dry_run") else ""
+    st_color = {"success": "32", "failed": "31", "skipped": "33"}.get(status, "37")
+    return f"{name}({_color(mark, st_color)}{detail})"
 
 
 def _cli_responder(req) -> str:
+    """审批：数字选择 1/2/3，而非手输 yes/no/allyes。"""
+
+    print()
+    print(_rule("approval"))
+    print(f"│ level: {_level_label(req.safety_level)}  tool: {req.tool_name}")
+    print(f"│ risk : {req.risk_reason}")
+    print("│  1) yes      批准本次")
+    print("│  2) no       拒绝（工具记 skipped）")
+    print("│  3) allyes   本会话全部放行（仍不真实执行危险动作）")
     try:
-        choice = input(
-            f"\n[审批请求] 等级={req.safety_level.value} 工具={req.tool_name}\n"
-            f"  风险原因：{req.risk_reason}\n"
-            f"是否批准？[yes / no / allyes]: "
-        ).strip().lower()
+        choice = input(_color("╰─ 选择 [1-3] (默认 2): ", "33;1")).strip()
     except (EOFError, KeyboardInterrupt):
+        print()
         return "no"  # 非交互或取消时安全拒绝
-    return choice or "no"
+    return {"1": "yes", "2": "no", "3": "allyes"}.get(choice, "no")
 
 
-def _run_once(agent: Agent, text: str) -> None:
+def _run_once(agent: Agent, text: str, *, interactive: bool = False) -> None:
     token = CancellationToken()
     listener = EscListener(token)
     listener.start()
@@ -39,31 +93,115 @@ def _run_once(agent: Agent, text: str) -> None:
         resp = agent.handle(text, cancel_token=token, responder=_cli_responder)
     finally:
         listener.stop()
-    print(json.dumps(resp.model_dump(mode="json"), ensure_ascii=False, indent=2))
+    payload = resp.model_dump(mode="json")
+    if interactive:
+        _print_chat(payload)
+    else:
+        # 单轮：打印结构化 JSON（适合管道与题目验收）
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def _print_banner(agent: Agent) -> None:
+    print(_rule("device safety agent"))
+    print("│ 制造业设备安全操作 CLI（聊天式，类 Claude Code）")
+    print(f"│ llm={agent.llm_mode}  session-memory=on  esc=cancel")
+    print("│ commands: /help /status /clear /json /exit")
+    print("╰" + "─" * 60)
+
+
+def _print_help() -> None:
+    print(_rule("help"))
+    print("│ 直接输入问题或设备指令，回车提交（支持中文）")
+    print("│ /status  查看会话/设备状态")
+    print("│ /clear   清空短期工作记忆")
+    print("│ /json    查看上一轮完整结构化 JSON")
+    print("│ /exit    退出会话")
+    print("│ ESC      打断当前运行")
+    print("╰" + "─" * 60)
+
+
+def _print_status(agent: Agent) -> None:
+    device = agent.memory.device_state or {"status": "unknown"}
+    print(_rule("status"))
+    print(f"│ llm_mode      : {agent.llm_mode}")
+    print(f"│ memory_tokens : {agent.memory.token_count()}")
+    print(f"│ safety_facts  : {len(agent.memory.pinned_safety)} 条")
+    print(f"│ turns         : {len(agent.memory.turns)}")
+    print(f"│ device_state  : {json.dumps(device, ensure_ascii=False)}")
+    print("╰" + "─" * 60)
+
+
+def _print_chat(payload: dict[str, Any]) -> None:
+    """聊天式输出：answer 为主，元数据/工具简要摘要，不默认打印完整 JSON。"""
+
+    global _last_payload
+    _last_payload = payload
+    print()
+    # 1) answer 为主要回复（像聊天）
+    print(payload.get("answer", ""))
+    # 2) 简要元数据行（灰色次要信息）
+    level = _level_label(payload.get("safety_level", ""))
+    meta = f"  {payload.get('intent', 'unknown')} · {level} · conf {payload.get('confidence', 0.0):.2f}"
+    tools = payload.get("tool_calls") or []
+    if tools:
+        meta += " · " + " · ".join(_tool_brief(t) for t in tools)
+    print(_color(meta, "90"))
+    sources = payload.get("sources") or []
+    if sources:
+        print(_color(f"  sources: {', '.join(sources[:3])}", "90"))
+    if payload.get("error"):
+        print(_color(f"  error: {payload['error'].get('type')}", "31"))
+    if payload.get("need_human_approval"):
+        print(_color("  [需人工审批] 输入 /json 查看完整结构化输出", "33"))
+    else:
+        print(_color("  输入 /json 查看完整结构化输出", "90"))
 
 
 def _repl(agent: Agent) -> None:
-    print("制造业设备安全操作 Agent（输入 exit 退出；运行中按 ESC 可打断）")
+    global _last_payload
+    _print_banner(agent)
     while True:
         try:
-            text = input("\n> ").strip()
+            text = input("\n" + _prompt())
         except (EOFError, KeyboardInterrupt):
             print()
             break
+        text = text.strip()
         if not text:
             continue
-        if text.lower() in ("exit", "quit", "退出"):
+        command = text.lower()
+        if command in ("exit", "quit", "退出", "/exit", "/quit"):
             break
-        _run_once(agent, text)
+        if command in ("/help", "help", "?"):
+            _print_help()
+            continue
+        if command == "/status":
+            _print_status(agent)
+            continue
+        if command == "/clear":
+            agent.memory.turns.clear()
+            agent.memory.summary.clear()
+            agent.memory.pinned_safety.clear()
+            _last_payload = None
+            print(_color("session memory cleared", "32"))
+            continue
+        if command == "/json":
+            if _last_payload:
+                print(json.dumps(_last_payload, ensure_ascii=False, indent=2))
+            else:
+                print(_color("尚无运行结果，先输入一个问题吧", "90"))
+            continue
+        _run_once(agent, text, interactive=True)
 
 
 def main(argv=None) -> None:
-    # 尽量以 UTF-8 输出，避免 Windows GBK 控制台中文乱码
-    if hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
+    # 以 UTF-8 处理 stdin/stdout，确保 Windows 下中文输入/输出不乱码
+    for stream in (sys.stdout, sys.stdin):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
 
     load_dotenv()
     parser = argparse.ArgumentParser(prog="agent.cli", description="制造业设备安全操作 Agent")
@@ -76,7 +214,11 @@ def main(argv=None) -> None:
     parser.add_argument("--model", default=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"))
     args = parser.parse_args(argv)
 
-    agent = Agent(llm_mode=args.llm)
+    agent = Agent(
+        llm_mode=args.llm,
+        api_key=os.getenv("DEEPSEEK_API_KEY"),
+        model=args.model,
+    )
     if args.session or args.input is None:
         _repl(agent)
     else:

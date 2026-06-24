@@ -112,3 +112,90 @@ def test_real_llm_live_call_returns_valid_result_or_fallback():
         "model_invalid_json",
         "model_error:APIConnectionError",
     }
+
+
+def test_real_llm_stream_cancel_interrupts_mid_stream():
+    # P1：用 fake streaming client 证明 RealLLM 流式循环里 ESC 真能打断
+    from agent.interrupt import CancelledError, CancellationToken
+
+    class _Delta:
+        def __init__(self, t):
+            self.content = t
+
+    class _Choice:
+        def __init__(self, t):
+            self.delta = _Delta(t)
+
+    class _Chunk:
+        def __init__(self, t):
+            self.choices = [_Choice(t)]
+
+    class _FakeStream:
+        def __init__(self, token):
+            self.token = token
+
+        def __iter__(self):
+            for i in range(20):
+                if i == 3:
+                    self.token.cancel()  # 第 4 个 chunk 后取消
+                yield _Chunk(f"c{i}")
+
+    class _Completions:
+        def __init__(self, token):
+            self._token = token
+
+        def create(self, **kw):
+            return _FakeStream(self._token)
+
+    class _FakeClient:
+        def __init__(self, token):
+            self.chat = type("C", (), {"completions": _Completions(token)})()
+
+    token = CancellationToken()
+    llm = RealLLM("fake-key", "x", "m", {"stream": True, "max_retries": 1})
+    llm.client = _FakeClient(token)
+    with pytest.raises(CancelledError):
+        llm.generate({"raw_user_input": "x"}, cancel_token=token)
+
+
+def test_real_llm_client_init_failure_reported():
+    # P2：key 存在但 SDK 初始化失败，应报 model_error:client_init 而非 no_api_key
+    llm = RealLLM("some-key", "x", "m", {})
+    llm.client = None
+    llm._init_error = "ImportError"
+    result = llm.generate({"raw_user_input": "x"})
+    assert result.error == "model_error:client_init:ImportError"
+
+
+def test_validate_draft_accepts_valid():
+    from agent.llm import validate_draft
+
+    resp, err = validate_draft(
+        {"answer": "a", "intent": "qa", "safety_level": "L0", "confidence": 0.8,
+         "need_human_approval": False, "final_action": "x"}
+    )
+    assert err is None and resp is not None
+    assert resp.intent.value == "qa"
+
+
+def test_validate_draft_rejects_bad_intent_enum():
+    from agent.llm import validate_draft
+
+    resp, err = validate_draft({"intent": "bogus", "safety_level": "L0", "confidence": 0.5})
+    assert resp is None
+    assert err.startswith("schema_invalid")
+
+
+def test_validate_draft_rejects_confidence_out_of_range():
+    from agent.llm import validate_draft
+
+    resp, err = validate_draft({"intent": "qa", "safety_level": "L0", "confidence": 5.0})
+    assert resp is None and err.startswith("schema_invalid")
+
+
+def test_validate_draft_rejects_non_dict():
+    from agent.llm import validate_draft
+
+    resp, err = validate_draft("not a dict")
+    assert resp is None
+    assert err == "schema_invalid:not_a_dict"

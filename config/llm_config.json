@@ -1,0 +1,9 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-v4-pro",
+  "base_url": "https://api.deepseek.com",
+  "timeout_seconds": 180,
+  "max_retries": 3,
+  "stream": true,
+  "retry_once_on_invalid_json": true
+}

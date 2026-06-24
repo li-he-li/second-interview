@@ -1,0 +1,10 @@
+{
+  "max_memory_tokens": 64000,
+  "compress_trigger_tokens": 48000,
+  "keep_last_turns": 10,
+  "summary_max_tokens": 4000,
+  "hard_trim_tokens": 80000,
+  "token_counter": "tiktoken",
+  "compression_mode": "mock_template_first",
+  "llm_compression_enabled": true
+}

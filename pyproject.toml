@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "device-safety-agent"
+version = "0.1.0"
+description = "制造业设备安全操作 Agent —— CLI-only, mock + real LLM, 安全分级与人工审批"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.5",
+    "python-dotenv>=1.0",
+    "tiktoken>=0.5",
+    "openai>=1.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+# src layout: 代码在 src/agent 下，安装后可用 `python -m agent.cli`
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

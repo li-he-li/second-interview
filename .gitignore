@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Secrets — never commit real API keys
+.env
+.env.local
+.env.*.local
+*.key
+secrets/
+
+# Runtime artifacts (运行产物，不提交)
+.temp/
+logs/
+outputs/
+cache/
+
+# Note: runs/ is intentionally NOT ignored — selected runs/<trace_id>.json
+# are kept as submission evidence per the task requirement.

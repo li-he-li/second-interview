@@ -106,14 +106,11 @@ def test_search_knowledge_timeout_is_reported_as_failed_tool():
     assert r.safety_level == SafetyLevel.L2
 
 
-def test_trace_file_written_to_runs():
-    # 验证 handle 产出 runs/<trace_id>.json 运行证据
-    from pathlib import Path
-
-    runs = Path("runs")
-    before = len(list(runs.glob("*.json"))) if runs.exists() else 0
+def test_trace_file_written_to_runs(tmp_path):
+    # 验证 handle 产出 <trace_id>.json（conftest autouse 已把 RUNS_DIR 指向 tmp_path）
+    before = len(list(tmp_path.glob("*.json")))
     _agent().handle("设备报错 E42")
-    after = len(list(runs.glob("*.json")))
+    after = len(list(tmp_path.glob("*.json")))
     assert after > before
 
 

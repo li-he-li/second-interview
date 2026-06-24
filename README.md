@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/li-he-li/second-interview/actions/workflows/ci.yml/badge.svg)](https://github.com/li-he-li/second-interview/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-124%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen.svg)](tests/)
 
 一个 CLI-only 的制造业设备安全操作 Agent：基于本地知识库回答问题、识别用户意图、判断设备动作安全等级，并在危险或不确定场景下明确 fallback，绝不编造结果。
 
@@ -89,7 +89,7 @@ pre-commit install --hook-type commit-msg   # 启用 commit message 校验
 - ✅ 单轮 CLI 输入 + 交互式 REPL，均支持 ESC 打断。
 - ✅ 交互式会话提供类似 Claude Code / Codex 的终端工作台：横幅、聊天式回复、`yes/no/allyes` 审批、斜杠命令（/help /status /clear /trace /exit）；交互窗口不直接渲染完整 JSON，结构化结果写入 `runs/` 供代码/调用方使用。
 - ✅ mock LLM（默认）+ 真实 DeepSeek LLM 两种模式。
-- ✅ 本地知识库检索，输出 `sources`。
+- ✅ 本地知识库检索，输出 `sources`，并为每条命中提供简短前后文辅助 LLM 判断。
 - ✅ 五类意图识别：`qa / status_check / device_action / unsafe_action / unknown`。
 - ✅ 结构化 JSON 输出，Pydantic schema 校验。
 - ✅ L0/L1/L2 安全分级 + 人工审批（`yes / no / allyes`）。
@@ -198,7 +198,7 @@ src/agent/
 
 ## 知识库
 
-`knowledge/*.md`：`device_overview`（设备说明）/ `safety_rules`（安全规则）/ `troubleshooting`（故障排查）/ `forbidden_actions`（禁止动作）。按 `##` 标题切 chunk，lexical 评分检索，冲突时按 禁止动作 > 安全规则 > 故障排查 > 设备说明 优先。
+`knowledge/*.md`：`device_overview`（设备说明）/ `safety_rules`（安全规则）/ `troubleshooting`（故障排查）/ `forbidden_actions`（禁止动作）。按 `##` 标题切 chunk，lexical 评分检索，冲突时按 禁止动作 > 安全规则 > 故障排查 > 设备说明 优先。每条命中会附带 `title/context_before/context_after`，只作为上下文理解辅助；最终 `sources` 仍只接受真实命中的 `source_id`。
 
 ## 失败处理
 

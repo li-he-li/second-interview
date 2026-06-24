@@ -54,6 +54,9 @@ class Match:
     text: str
     score: float
     category: str
+    title: str
+    context_before: str
+    context_after: str
 
 
 def normalize(text: str) -> str:
@@ -171,6 +174,17 @@ def _unknown_model_codes(norm_query: str, chunks: list[Chunk]) -> list[str]:
     return [code for code in codes if code not in blob]
 
 
+def _brief_context(chunk: Chunk | None, limit: int = 100) -> str:
+    """给 LLM 的相邻上下文摘要；只辅助理解，不作为引用来源。"""
+
+    if chunk is None:
+        return ""
+    text = " ".join(chunk.text.split())
+    if len(text) > limit:
+        text = text[:limit].rstrip() + "..."
+    return f"{chunk.title}: {text}"
+
+
 def search(
     query: str,
     chunks: list[Chunk],
@@ -186,11 +200,25 @@ def search(
     scored = [(c, _score(c, norm, error_codes)) for c in chunks]
     scored = [(c, s) for c, s in scored if s > 0]
     scored.sort(key=lambda x: (-x[1], -x[0].priority))
-    return [
-        Match(source=c.source_id, text=c.text, score=round(s, 2), category=c.category)
-        for c, s in scored[:top_k]
-        if s >= min_score
-    ]
+    results: list[Match] = []
+    for c, s in scored[:top_k]:
+        if s < min_score:
+            continue
+        idx = chunks.index(c)
+        prev_chunk = chunks[idx - 1] if idx > 0 and chunks[idx - 1].file == c.file else None
+        next_chunk = chunks[idx + 1] if idx + 1 < len(chunks) and chunks[idx + 1].file == c.file else None
+        results.append(
+            Match(
+                source=c.source_id,
+                text=c.text,
+                score=round(s, 2),
+                category=c.category,
+                title=c.title,
+                context_before=_brief_context(prev_chunk),
+                context_after=_brief_context(next_chunk),
+            )
+        )
+    return results
 
 
 class KnowledgeBase:

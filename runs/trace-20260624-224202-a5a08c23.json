@@ -1,0 +1,21 @@
+{
+  "trace_id": "trace-20260624-224202-a5a08c23",
+  "timestamp": "2026-06-24T22:42:02",
+  "warnings": [],
+  "raw_input": "",
+  "llm_mode": "mock",
+  "final_json": {
+    "answer": "输入为空，无法判断意图。",
+    "intent": "unknown",
+    "sources": [],
+    "confidence": 0.0,
+    "safety_level": "L2",
+    "need_human_approval": true,
+    "tool_calls": [],
+    "final_action": "fallback",
+    "error": {
+      "type": "invalid_input",
+      "message": "invalid_input:empty"
+    }
+  }
+}

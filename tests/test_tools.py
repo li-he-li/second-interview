@@ -26,6 +26,9 @@ def test_search_knowledge_returns_e42_match():
     out = search_knowledge("设备报错 E42", kb)
     assert out["count"] >= 1
     assert "e42" in out["matches"][0]["source"].lower()
+    assert out["matches"][0]["title"]
+    assert "context_before" in out["matches"][0]
+    assert "context_after" in out["matches"][0]
 
 
 def test_search_knowledge_empty_for_irrelevant():

@@ -28,6 +28,9 @@ def test_error_code_e42_hits_troubleshooting():
     assert "e42" in matches[0].source.lower()
     assert matches[0].category == "troubleshooting"
     assert matches[0].score >= 5.0  # 错误码精确匹配加分
+    assert matches[0].title
+    assert hasattr(matches[0], "context_before")
+    assert hasattr(matches[0], "context_after")
 
 
 def test_max_speed_and_out_of_range_hits_forbidden():
@@ -72,3 +75,13 @@ def test_filter_sources_rejects_fabricated():
 def test_normalize_fullwidth_to_halfwidth():
     assert normalize("Ｅ４２") == "e42"
     assert normalize("  多余   空格  ") == "多余 空格"
+
+
+def test_match_context_is_brief_and_same_file_only():
+    kb = KnowledgeBase.load()
+    matches = kb.search("设备报错 E42，应该怎么排查？")
+    m = matches[0]
+    assert len(m.context_before) <= 130
+    assert len(m.context_after) <= 130
+    # 上下文只作为辅助说明，source 仍是实际命中片段。
+    assert m.source in kb.filter_sources([m.source])

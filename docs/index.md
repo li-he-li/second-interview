@@ -1,4 +1,4 @@
----
+﻿---
 tags: [project, index, planning]
 date: 2026-06-24
 summary: 项目索引；M1 基础设施完成，进入模块实现阶段
@@ -12,7 +12,7 @@ status: in_progress
 - 项目：制造业设备安全操作 Agent（AI Agent 实习二面小项目，CLI-only）。
 - 方案：`plan/initial_solution.md`（v2，已通过 7 项门控校验）。
 - 实现进度：✅ **M1-M11 全部完成**，CLI 端到端可运行（mock + real DeepSeek）。
-- 测试：全量 124 passed 1 skipped（`pytest tests/`，临时目录由 `conftest.py` 动态生成）；详见 `docs/03-tests/2026-06-24.md`。
+- 测试：全量 130 passed 1 skipped（`pytest tests/`，临时目录由 `conftest.py` 动态生成）；详见 `docs/03-tests/2026-06-24.md`。
 - 安全：真实 DeepSeek key 仅存 `.env`（已 gitignore）；`.env.example` 不含真实值；源码无硬编码；L2 审批硬约束不可配置绕过。
 - 尚未完成：无（README 到岗信息由候选人填写）。
 
@@ -56,6 +56,7 @@ status: in_progress
 - 2026-06-24：**最终审查修复** —— CLI real key/model 传递、runner 接入 `search_knowledge` 工具链路、未知型号不硬答、删除 egg-info 产物；113 passed 1 skipped；CLI 题目样例通过。
 - 2026-06-24：**交互式 CLI 改造** —— `--session` 改为类 Claude Code / Codex 工作台式界面；交互窗口不直接渲染完整 JSON，单轮模式保持纯 JSON；117 passed 1 skipped。
 - 2026-06-24：**审查修复#6** —— `execute_device_command` 工具输入独立 safety 复核，LLM 越权工具调用不能绕过 L2 审批；124 passed 1 skipped。
+- 2026-06-24：**知识库上下文窗口** —— `search_knowledge` 命中项增加 `title/context_before/context_after`，帮助 LLM 判断片段上下文；130 passed 1 skipped。
 
 ## 待确认
 

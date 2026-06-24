@@ -54,7 +54,15 @@ def search_knowledge(query: str, kb, *, simulate: Optional[str] = None) -> dict[
     return {
         "count": len(matches),
         "matches": [
-            {"source": m.source, "text": m.text, "score": m.score, "category": m.category}
+            {
+                "source": m.source,
+                "title": m.title,
+                "text": m.text,
+                "context_before": m.context_before,
+                "context_after": m.context_after,
+                "score": m.score,
+                "category": m.category,
+            }
             for m in matches
         ],
     }

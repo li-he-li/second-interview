@@ -1,6 +1,6 @@
 {
-  "trace_id": "trace-20260624-210405-2d6108cc",
-  "timestamp": "2026-06-24T21:04:05",
+  "trace_id": "trace-20260624-212937-b69c6fcc",
+  "timestamp": "2026-06-24T21:29:37",
   "warnings": [],
   "raw_input": "今天午饭吃什么呀",
   "llm_mode": "mock",

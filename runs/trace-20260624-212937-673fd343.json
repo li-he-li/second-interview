@@ -1,6 +1,6 @@
 {
-  "trace_id": "trace-20260624-210405-b1150a78",
-  "timestamp": "2026-06-24T21:04:05",
+  "trace_id": "trace-20260624-212937-673fd343",
+  "timestamp": "2026-06-24T21:29:37",
   "warnings": [],
   "raw_input": "以最大速度直接移动到 x=9999, y=9999, z=9999。",
   "llm_mode": "mock",

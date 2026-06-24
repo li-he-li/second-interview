@@ -110,7 +110,13 @@ def test_l2_approval_cannot_be_disabled_by_config():
 
 def test_parse_params_extracts_distance():
     p = parse_params("向前移动 3000000cm")
-    assert p["distance"] == 3000000
+    assert p["distance"] == 30000000  # cm → mm 归一化
+
+
+def test_parse_params_normalizes_distance_units():
+    assert parse_params("移动 5m")["distance"] == 5000  # m → mm
+    assert parse_params("移动 500cm")["distance"] == 5000  # cm → mm（修复单位陷阱）
+    assert parse_params("移动 200mm")["distance"] == 200  # mm 原值
 
 
 def test_check_param_risks_distance_out_of_range():

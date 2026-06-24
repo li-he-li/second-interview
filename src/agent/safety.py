@@ -57,9 +57,17 @@ def parse_params(raw_text: str) -> dict[str, Any]:
     if m:
         force = int(m.group(1))
     distance: Optional[int] = None
-    m = re.search(r"(?:distance|距离|移动)\s*[=:]?\s*(\d+)", text)
+    m = re.search(r"(?:distance|距离|移动)\s*[=:]?\s*(\d+)\s*(cm|mm|m|厘米|毫米|米|km|公里)?", text)
     if m:
-        distance = int(m.group(1))
+        val = int(m.group(1))
+        unit = (m.group(2) or "").lower()
+        if unit in ("cm", "厘米"):
+            val *= 10
+        elif unit in ("m", "米"):
+            val *= 1000
+        elif unit in ("km", "公里"):
+            val *= 1000000
+        distance = val  # 归一化到 mm
     return {"coordinates": coords, "speed": speed, "force": force, "distance": distance}
 
 

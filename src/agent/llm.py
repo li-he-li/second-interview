@@ -58,6 +58,34 @@ class LLMResult:
     mode: str  # mock / real
 
 
+# 口语 → 规范词映射（仅用于检索增强；不改危险词/越界参数/来源）
+_QUERY_SYNONYMS = {
+    "机器手臂": "机械臂", "机器手": "机械臂", "机器人臂": "机械臂", "robot arm": "机械臂",
+    "爪子": "夹爪", "手爪": "夹爪", "夹子": "夹爪",
+    "不动了": "故障 卡死", "不动作": "故障", "卡住了": "卡死 故障", "卡住": "卡死",
+    "坏了": "故障", "出问题": "故障", "出故障": "故障",
+    "啥意思": "含义 说明", "什么意思": "含义 说明",
+    "咋办": "排查", "怎么办": "排查", "怎么处理": "排查", "咋整": "排查",
+    "抓不住": "抓取 失败", "抓不牢": "抓取 失败",
+}
+_QUERY_FILLER = ["那个", "这个", "一下", "帮我", "麻烦", "请问", "我想问", "我想", "嗯", "啊", "呢", "吧"]
+
+
+def _rewrite_query(raw: str, norm: str) -> str:
+    """把不专业/口语化查询改写为更准确的检索 query。
+
+    只做检索增强（同义词归一 + 去口语填充 + 补词）；不改危险词、不改越界参数、不补造来源。
+    """
+
+    q = norm
+    for k, v in _QUERY_SYNONYMS.items():
+        q = q.replace(k, v)
+    for f in _QUERY_FILLER:
+        q = q.replace(f, " ")
+    q = re.sub(r"\s+", " ", q).strip()
+    return q or norm
+
+
 def enhance_prompt(
     raw_input: str,
     *,
@@ -86,9 +114,11 @@ def enhance_prompt(
         "force": params["force"],
         "error_code": error_codes[0] if error_codes else None,
     }
+    enhanced_query = _rewrite_query(raw_input, norm)
     return {
         "raw_user_input": raw_input,  # 原文，禁止覆盖
         "normalized_query": norm,
+        "enhanced_query": enhanced_query,  # 改写后的检索 query（口语→规范+补词）
         "extracted_entities": entities,
         "risk_hints": hints,  # 供 LLM 参考，不强制改变其决策
         "tool_results": tool_results or [],  # 上轮工具结果（agent loop 回传）
@@ -169,7 +199,7 @@ class MockLLM:
 
     def _decide_tool(self, ctx: dict) -> dict:
         raw = ctx.get("raw_user_input", "")
-        norm = ctx.get("normalized_query", "")
+        norm = ctx.get("enhanced_query") or ctx.get("normalized_query", "")  # 用改写后的 query 决策
         hints = ctx.get("risk_hints") or []
         coords = (ctx.get("extracted_entities") or {}).get("coordinates") or {}
 
@@ -180,11 +210,14 @@ class MockLLM:
                 "tool_calls": [],
                 "final": True,
             }
-        # 故障/错误码/知识问答 → 检索知识库
-        if re.search(r"e\d+", norm) or any(w in norm for w in ("故障", "排查", "报错", "说明", "规则", "是什么", "怎么")):
+        # 故障/错误码/知识问答 → 检索知识库（用增强后的 query 提高准确度）
+        if re.search(r"e\d+", norm) or any(
+            w in norm for w in ("故障", "排查", "报错", "说明", "规则", "是什么", "怎么", "含义", "卡死", "失败")
+        ):
+            query = ctx.get("enhanced_query") or raw
             return {
                 "answer": "让我查一下知识库。",
-                "tool_calls": [{"tool": "search_knowledge", "input": {"query": raw}}],
+                "tool_calls": [{"tool": "search_knowledge", "input": {"query": query}}],
                 "final": False,
             }
         # 状态/能力询问 → 查设备状态

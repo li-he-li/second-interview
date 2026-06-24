@@ -37,6 +37,22 @@ def test_enhance_prompt_extracts_error_code():
     assert ctx["extracted_entities"]["error_code"] == "e42"
 
 
+def test_enhance_rewrites_colloquial_query():
+    # 口语化查询 → 改写为规范检索 query（同义词归一 + 去填充词 + 补词）
+    ctx = _ctx("那个机器手臂不动了咋办")
+    eq = ctx["enhanced_query"]
+    assert "机械臂" in eq
+    assert "故障" in eq or "卡死" in eq
+    assert "那个" not in eq and "咋办" not in eq
+
+
+def test_enhance_query_preserves_error_code_and_meaning():
+    ctx = _ctx("E42 啥意思")
+    eq = ctx["enhanced_query"]
+    assert "e42" in eq
+    assert "含义" in eq or "说明" in eq
+
+
 def test_mock_llm_normal_outputs_parsed_draft():
     llm = MockLLM()
     ctx = _ctx("设备报错 E42 怎么排查")

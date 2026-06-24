@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from .approval import ApprovalGate, ApprovalRequest, approval_key
+from .approval import ApprovalGate, ApprovalRequest
 from .config import AppConfig, load_app_config
 from .interrupt import CancellationToken, CancelledError
 from .intent import classify, has_device_signal
@@ -47,6 +47,7 @@ from .trace import TraceRecorder, setup_logging
 AgentEvent = Callable[[str, Any], None]
 
 DEFAULT_MAX_ROUNDS = 5
+_LEVEL_RANK = {SafetyLevel.L0: 0, SafetyLevel.L1: 1, SafetyLevel.L2: 2}
 
 
 def _intent_from_tools(intent_text: Intent, tool_names: list[str]) -> Intent:
@@ -60,6 +61,56 @@ def _intent_from_tools(intent_text: Intent, tool_names: list[str]) -> Intent:
         if "search_knowledge" in tool_names and intent_text != Intent.UNSAFE_ACTION:
             return Intent.QA if intent_text == Intent.UNKNOWN else intent_text
     return intent_text
+
+
+def _is_higher_level(candidate: SafetyLevel, current: SafetyLevel) -> bool:
+    return _LEVEL_RANK[candidate] > _LEVEL_RANK[current]
+
+
+def _command_to_safety_text(command: Any) -> str:
+    """把 LLM 提出的命令对象转成 safety.py 可解析的文本。"""
+
+    if isinstance(command, str):
+        return command
+    if not isinstance(command, dict):
+        return json_dumps(command)
+
+    parts: list[str] = []
+    action = command.get("action") or command.get("operation") or command.get("type")
+    if action is not None:
+        parts.append(str(action))
+
+    coord_source = command.get("coordinates") if isinstance(command.get("coordinates"), dict) else command
+    for axis in ("x", "y", "z"):
+        if axis in coord_source:
+            parts.append(f"{axis}={coord_source[axis]}")
+
+    speed = command.get("speed") or command.get("velocity")
+    if speed is not None:
+        parts.append(f"速度={speed}")
+
+    force = command.get("force") or command.get("force_newton") or command.get("newton")
+    if force is not None:
+        parts.append(f"力度={force}")
+
+    parts.append(json_dumps(command))
+    return " ".join(parts)
+
+
+def _raise_assessment(current, candidate, *, reason: str) -> None:
+    """把工具输入评估出的更高风险合并到当前请求评估中。"""
+
+    if _is_higher_level(candidate.level, current.level):
+        current.level = candidate.level
+    current.need_human_approval = current.need_human_approval or candidate.need_human_approval
+    current.reasons.append(reason)
+    current.reasons.extend(candidate.reasons)
+    for hint in candidate.risk_hints:
+        if hint not in current.risk_hints:
+            current.risk_hints.append(hint)
+    for word in candidate.danger_words:
+        if word not in current.danger_words:
+            current.danger_words.append(word)
 
 
 class Agent:
@@ -116,9 +167,11 @@ class Agent:
             token.check()
             initial_ctx = self._safe_enhance(raw_input, [], trace)
             risk_hints = initial_ctx.get("risk_hints") or []
-            initial_intent = classify(raw_input, risk_hints=risk_hints)
+            # 用改写后的 query 识别意图/设备信号（口语"机器手臂"→"机械臂"，避免误判 unknown/L2）
+            enhanced_query = initial_ctx.get("enhanced_query") or raw_input
+            initial_intent = classify(enhanced_query, risk_hints=risk_hints)
             device_status = None
-            if initial_intent in (Intent.DEVICE_ACTION, Intent.UNSAFE_ACTION) or has_device_signal(raw_input):
+            if initial_intent in (Intent.DEVICE_ACTION, Intent.UNSAFE_ACTION) or has_device_signal(enhanced_query):
                 device_status = get_device_status()
                 self.memory.update_device_state(device_status)
             assessment = evaluate(raw_input, initial_intent, device_status=device_status, safety_cfg=self.cfg.safety)
@@ -159,7 +212,7 @@ class Agent:
                 for tc in tool_calls:
                     if on_event:
                         on_event("tool_call", tc)
-                    call = self._exec_tool(tc, assessment, responder, token, trace)
+                    call = self._exec_tool(tc, assessment, device_status, responder, token, trace)
                     executed_calls.append(call)
                     tool_results.append(
                         {"tool": call.tool, "input": call.input, "output": call.output, "status": call.status.value}
@@ -238,7 +291,7 @@ class Agent:
             trace.append("warnings", f"prompt_enhancement_error:{type(exc).__name__}")
             return {"raw_user_input": raw_input, "normalized_query": normalize(raw_input), "tool_results": tool_results, "risk_hints": []}
 
-    def _exec_tool(self, tc: dict, assessment, responder, token, trace) -> ToolCall:
+    def _exec_tool(self, tc: dict, assessment, device_status, responder, token, trace) -> ToolCall:
         name = tc.get("tool", "")
         inp = tc.get("input") or {}
         token.check()
@@ -246,11 +299,39 @@ class Agent:
             return ToolCall(tool=name, input=inp, output={"error": "not_in_whitelist"}, status=ToolCallStatus.SKIPPED)
         # 设备命令：强制 dry-run + 用户审批（用实际安全等级，P1：不写死 L2）
         if name == "execute_device_command":
+            if device_status is None:
+                device_status = get_device_status()
+                self.memory.update_device_state(device_status)
+            command_assessment = evaluate(
+                _command_to_safety_text(inp.get("command", {})),
+                Intent.DEVICE_ACTION,
+                device_status=device_status,
+                safety_cfg=self.cfg.safety,
+            )
+            _raise_assessment(assessment, command_assessment, reason="tool_input_safety_check")
+            trace.append(
+                "tool_safety_checks",
+                {
+                    "tool": name,
+                    "level": command_assessment.level.value,
+                    "reasons": command_assessment.reasons,
+                    "risk_hints": command_assessment.risk_hints,
+                },
+            )
             approved = self._ask_approval(assessment.level, name, inp, responder, trace)
             if not approved:
                 return ToolCall(tool=name, input=inp, output={"rejected": True}, status=ToolCallStatus.SKIPPED)
-            out = execute_device_command(inp.get("command", {}), dry_run=True)  # 永远 dry-run
-            return ToolCall(tool=name, input=inp, output=out, status=ToolCallStatus.SUCCESS)
+            try:
+                out = execute_device_command(
+                    inp.get("command", {}),
+                    dry_run=True,
+                    simulate=self.tool_simulate,
+                )  # 永远 dry-run
+                return ToolCall(tool=name, input=inp, output=out, status=ToolCallStatus.SUCCESS)
+            except ToolTimeout:
+                return ToolCall(tool=name, input=inp, output={"error": "timeout"}, status=ToolCallStatus.FAILED)
+            except ToolError as exc:
+                return ToolCall(tool=name, input=inp, output={"error": str(exc)}, status=ToolCallStatus.FAILED)
         try:
             if name == "search_knowledge":
                 out = search_knowledge(inp.get("query", ""), self.kb, simulate=self.tool_simulate)

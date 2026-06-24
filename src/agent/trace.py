@@ -13,7 +13,7 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 RUNS_DIR = Path("runs")
 LOGS_DIR = Path("logs")
@@ -64,7 +64,9 @@ class TraceRecorder:
             if msg:
                 self.data["warnings"].append(msg)
 
-    def save(self, runs_dir: Path = RUNS_DIR) -> Path:
+    def save(self, runs_dir: Optional[Path] = None) -> Path:
+        if runs_dir is None:
+            runs_dir = RUNS_DIR  # 运行时读模块全局（支持测试 monkeypatch 隔离）
         runs_dir.mkdir(exist_ok=True)
         path = runs_dir / f"{self.trace_id}.json"
         with path.open("w", encoding="utf-8") as fh:

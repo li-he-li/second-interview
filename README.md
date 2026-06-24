@@ -1,5 +1,9 @@
 # 制造业设备安全操作 Agent
 
+[![CI](https://github.com/li-he-li/second-interview/actions/workflows/ci.yml/badge.svg)](https://github.com/li-he-li/second-interview/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-124%20passed-brightgreen.svg)](tests/)
+
 一个 CLI-only 的制造业设备安全操作 Agent：基于本地知识库回答问题、识别用户意图、判断设备动作安全等级，并在危险或不确定场景下明确 fallback，绝不编造结果。
 
 > AI Agent 开发实习岗二面小项目。默认 mock LLM 模式，无需 API key 即可跑通主流程；可选真实 DeepSeek LLM。

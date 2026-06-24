@@ -24,5 +24,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# 禁用 pytest cache，避免 .pytest_cache 在本机环境的权限 warning
+# （cache 对本项目非必需；如需 last-failed 功能可临时移除此行）。
+addopts = "-p no:cacheprovider"
 # 临时目录由 conftest.py 的 pytest_configure 动态生成项目内唯一子目录
 # （.temp/pytest-<时间戳>-<pid>），避免系统 temp 权限问题与固定目录复跑清理冲突。

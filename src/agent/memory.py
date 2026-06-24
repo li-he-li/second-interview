@@ -5,16 +5,17 @@
 - token 计数用 tiktoken（cl100k_base），不可用时降级为字符估算。
 - 超过 ``compress_trigger_tokens``（默认 48000）触发压缩：保留最近 ``keep_last_turns``
   轮原文，更早的压缩进结构化 summary。
+- 压缩后 summary 按 ``summary_max_tokens`` 裁剪普通叙述，安全事实不裁。
 - 超过 ``hard_trim_tokens``（默认 80000）执行硬裁剪，只裁最旧普通对话，**不裁 pinned safety**。
-- mock 模式使用确定性摘要模板；安全事实（危险词、越界参数、急停、L2 决策、工具失败）pinned 不丢。
-- 记忆只在当前 CLI 会话内有效，不作为知识库来源，不写入 sources。
+- ``context_for_llm`` 注入时按 ``max_memory_tokens`` 预算裁剪 recent_turns，pinned safety 永不裁。
+- mock 模式使用确定性摘要模板；记忆只在当前 CLI 会话内有效，不作为知识库来源。
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 try:
     import tiktoken
@@ -86,6 +87,7 @@ class WorkingMemory:
         compressed = False
         if before >= cfg.compress_trigger_tokens:
             self._compress(cfg)
+            self._trim_summary(cfg)
             compressed = True
         after_compress = self.token_count()
         trimmed = False
@@ -121,18 +123,52 @@ class WorkingMemory:
             "last_role": old_turns[-1].role if old_turns else "",
         }
 
+    def _trim_summary(self, cfg: MemoryConfig) -> None:
+        """summary 超 summary_max_tokens 时裁剪普通叙述，保留安全事实字段。
+
+        可裁：summary 文本 / open_questions / tool_results / knowledge_sources_used。
+        不裁：active_risks / device_state / human_decisions（安全与决策事实）。
+        """
+
+        list_keys = ("open_questions", "tool_results", "knowledge_sources_used")
+        while count_tokens(json.dumps(self.summary, ensure_ascii=False)) > cfg.summary_max_tokens:
+            trimmed_one = False
+            for key in list_keys:
+                if self.summary.get(key):
+                    self.summary[key] = self.summary[key][:-1]
+                    trimmed_one = True
+                    break
+            if trimmed_one:
+                continue
+            text = self.summary.get("summary", "")
+            if len(text) > 8:
+                self.summary["summary"] = text[: len(text) // 2]  # 截断普通叙述
+            else:
+                break  # 仅剩安全事实，停止
+
     def _hard_trim(self, cfg: MemoryConfig) -> None:
         """只裁最旧普通对话文本，pinned safety 不裁。"""
 
         while self.token_count() >= cfg.hard_trim_tokens and len(self.turns) > 1:
             self.turns.pop(0)
 
-    def context_for_llm(self) -> dict[str, Any]:
-        """组装注入 LLM 的工作记忆上下文（摘要 + 最近轮次 + 安全事实）。"""
+    def context_for_llm(self, cfg: Optional[MemoryConfig] = None) -> dict[str, Any]:
+        """组装注入 LLM 的上下文；给定 cfg 时按 max_memory_tokens 裁剪 recent_turns。
 
-        return {
+        pinned_safety 永不裁剪；recent_turns 从最旧开始裁，至少保留 1 轮。
+        """
+
+        ctx = {
             "summary": self.summary,
             "recent_turns": [{"role": t.role, "content": t.content} for t in self.turns],
             "pinned_safety": list(self.pinned_safety),
             "device_state": self.device_state,
         }
+        if cfg is None:
+            return ctx
+        while (
+            count_tokens(json.dumps(ctx, ensure_ascii=False)) > cfg.max_memory_tokens
+            and len(ctx["recent_turns"]) > 1
+        ):
+            ctx["recent_turns"].pop(0)  # 裁最旧普通对话，pinned_safety 保留
+        return ctx

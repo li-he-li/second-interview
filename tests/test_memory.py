@@ -80,3 +80,27 @@ def test_context_for_llm_structure():
     assert "summary" in ctx and "recent_turns" in ctx
     assert ctx["recent_turns"][0]["content"] == "E42 怎么排查"
     assert ctx["pinned_safety"] == ["tool_failed:search_knowledge"]
+
+
+def test_context_for_llm_trims_to_budget_keeps_safety():
+    # P1 回归：注入上下文按 max_memory_tokens 裁剪，pinned_safety 不裁
+    mem = WorkingMemory()
+    for i in range(20):
+        mem.add_turn("user", f"第 {i} 条 较 长 的 用 户 输 入 内 容 用 于 填 充 token 计 数")
+    mem.add_safety_fact("coordinate_out_of_range x=9999")
+    cfg = MemoryConfig(max_memory_tokens=60)  # 极小预算
+    ctx = mem.context_for_llm(cfg)
+    assert ctx["pinned_safety"] == ["coordinate_out_of_range x=9999"]  # safety 不裁
+    assert len(ctx["recent_turns"]) < 20  # recent_turns 被裁剪
+    assert len(ctx["recent_turns"]) >= 1
+
+
+def test_summary_trimmed_keeps_safety_facts():
+    # 压缩后 summary 超 summary_max_tokens 时裁普通叙述，active_risks 保留
+    mem = WorkingMemory()
+    mem.add_safety_fact("danger:最大速度")
+    cfg = MemoryConfig(compress_trigger_tokens=10, keep_last_turns=1, summary_max_tokens=20)
+    for i in range(12):
+        mem.add_turn("user", f"很长的历史对话内容第 {i} 条用于累积 token 计数 " * 4)
+    mem.maybe_compress(cfg)
+    assert "danger:最大速度" in mem.summary.get("active_risks", [])  # 安全事实保留

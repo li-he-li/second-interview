@@ -50,6 +50,7 @@ status: in_progress
 - 2026-06-24：**M6 完成** —— approval.py yes/no/allyes + 会话级 allyes 全局放行；7 passed。
 - 2026-06-24：**M7 完成** —— memory.py tiktoken 压缩 + pinned safety 不裁；8 passed。
 - 2026-06-24：**M8 完成** —— interrupt.py ESC 打断 CancellationToken；6 passed；全量 76 passed。
+- 2026-06-24：**审查修复#3** —— memory context_for_llm 接入预算裁剪；禁用 pytest cache；全量 78 passed 0 warning（interrupt 真实链路接入转 M9/M10）。
 
 ## 待确认
 

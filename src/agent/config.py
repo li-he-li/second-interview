@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from dataclasses import dataclass, field
@@ -74,10 +75,10 @@ def _load_json(name: str, default: dict, warnings: list[str]) -> dict:
         return data
     except FileNotFoundError:
         warnings.append(f"config_warning: {name} missing, using conservative default")
-        return default
+        return copy.deepcopy(default)
     except (json.JSONDecodeError, ValueError) as exc:
         warnings.append(f"config_warning: {name} invalid ({exc}), using conservative default")
-        return default
+        return copy.deepcopy(default)
 
 
 def load_app_config() -> AppConfig:

@@ -12,10 +12,12 @@ status: in_progress
 - 项目：制造业设备安全操作 Agent（AI Agent 实习二面小项目，CLI-only）。
 - 方案：`plan/initial_solution.md`（v2，已通过 7 项门控校验）。
 - 实现进度：
-  - ✅ M1 基础设施：pyproject + .venv + config 层 + models.py + config.py + trace.py（11 测试通过）。
-  - ⏳ 进行中：按里程碑 M2–M11 推进模块实现。
-- 安全：真实 DeepSeek key 仅存 `.env`（已 gitignore）；`.env.example` 不含真实值。
-- 尚未完成：知识库、工具、意图、安全、审批、记忆、打断、LLM、runner、CLI、README、测试套件。
+  - ✅ M1 基础设施：pyproject + .venv + config 层 + models.py + config.py + trace.py。
+  - ✅ M2 知识库：knowledge/*.md + knowledge.py（lexical 检索）。
+  - ⏳ 进行中：M3–M11 模块实现（工具/意图/安全/审批/记忆/打断/LLM/runner/CLI/README）。
+- 测试：全量 19 passed（`pytest tests/`，临时目录已固化为项目内 `.temp/pytest`）；详见 `docs/03-tests/2026-06-24.md`。
+- 安全：真实 DeepSeek key 仅存 `.env`（已 gitignore）；`.env.example` 不含真实值；源码无硬编码。
+- 尚未完成：工具、意图、安全、审批、记忆、打断、LLM、runner、CLI、README。
 
 ## 模块地图
 
@@ -40,6 +42,8 @@ status: in_progress
 - 2026-06-24：方案 v2 多轮细化（DeepSeek V4 Pro、结构化 JSON、ESC 打断、工作记忆压缩、7 项门控）。
 - 2026-06-24：按 `AGENTS.md` 补齐项目规范目录。
 - 2026-06-24：**M1 完成** —— git init、pyproject + .venv 依赖、config 层、models.py、config.py、trace.py；`tests/test_infra.py` 11 passed；安全扫描通过。
+- 2026-06-24：**M2 完成** —— knowledge/*.md 四文件 + knowledge.py lexical 检索；`tests/test_knowledge.py` 8 passed；全量 19 passed。
+- 2026-06-24：**审查修复** —— pytest 临时目录固化为 `.temp/pytest`；config 默认值 deepcopy 防污染；补 `docs/03-tests/2026-06-24.md` 测试报告；更新索引。
 
 ## 待确认
 

@@ -1,6 +1,6 @@
 {
-  "trace_id": "trace-20260624-224202-79ad367c",
-  "timestamp": "2026-06-24T22:42:02",
+  "trace_id": "trace-20260625-132318-e1466116",
+  "timestamp": "2026-06-25T13:23:18",
   "warnings": [],
   "raw_input": "把机械臂移动到 x=100, y=50, z=20，并抓取零件。",
   "llm_mode": "mock",
